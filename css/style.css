@@ -576,6 +576,14 @@ html, body {
   pointer-events: auto;
 }
 
+.custom-annotations.annotations-hidden {
+  opacity: 0;
+  pointer-events: none !important;
+}
+.custom-annotations.annotations-hidden > * {
+  pointer-events: none !important;
+}
+
 .page-spinner {
   position: absolute;
   top: 50%;
@@ -599,12 +607,25 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Tool status indicator */
+.tool-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  line-height: 1.3;
+  user-select: none;
+}
+
 .toolbar-btn.active-toggle {
-  background: rgba(0, 160, 223, 0.35);
+  background: rgba(0, 160, 223, 0.4);
+  box-shadow: 0 0 0 2px rgba(0, 160, 223, 0.5), inset 0 0 8px rgba(0, 160, 223, 0.15);
+  color: #fff;
 }
 
 .toolbar-btn.active-toggle:hover {
-  background: rgba(0, 160, 223, 0.5);
+  background: rgba(0, 160, 223, 0.55);
 }
 
 /* ============ MEMO COLOR PALETTE ============ */
@@ -1391,6 +1412,7 @@ html, body {
 }
 
 /* Save dropdown */
+.save-dropdown.hidden { display: none; }
 .save-dropdown {
   position: absolute;
   top: 100%;
@@ -1418,6 +1440,25 @@ html, body {
 }
 .save-dropdown-item:hover {
   background: rgba(0, 160, 223, 0.08);
+}
+
+/* Dropdown confirm button */
+.dropdown-confirm-btn {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 6px auto 4px;
+  padding: 5px 0;
+  border: 1px solid var(--nexon-blue);
+  border-radius: 4px;
+  background: rgba(0, 160, 223, 0.1);
+  color: var(--nexon-blue);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.dropdown-confirm-btn:hover {
+  background: rgba(0, 160, 223, 0.25);
 }
 
 /* Captured page wrappers */

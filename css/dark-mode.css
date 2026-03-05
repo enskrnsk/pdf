@@ -220,3 +220,18 @@ body.dark-mode .save-dropdown-item:hover { background: rgba(0, 160, 223, 0.12); 
 
 /* Emoji grid */
 body.dark-mode .emoji-grid-btn:hover { background: rgba(0, 160, 223, 0.12); }
+
+/* Tool status */
+body.dark-mode .tool-status {
+  color: rgba(228, 232, 236, 0.5);
+  border-left-color: rgba(228, 232, 236, 0.1);
+}
+
+/* Dropdown confirm button */
+body.dark-mode .dropdown-confirm-btn {
+  background: rgba(0, 160, 223, 0.15);
+  border-color: rgba(0, 160, 223, 0.5);
+}
+body.dark-mode .dropdown-confirm-btn:hover {
+  background: rgba(0, 160, 223, 0.3);
+}

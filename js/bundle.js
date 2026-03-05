@@ -830,6 +830,8 @@
       urlGo: $('#url-go'),
       urlClose: $('#url-close'),
       deleteSelectedBtn: $('#btn-delete-selected'),
+      toolStatus: $('#tool-status'),
+      toggleAnnotationsBtn: $('#btn-toggle-annotations'),
     };
 
     this.bindEvents();
@@ -874,23 +876,28 @@
     // Zoom
     this.elements.zoomOutBtn.addEventListener('click', function () {
       engine.setScale(Math.round((engine.currentScale - 0.25) * 100) / 100);
+      showToast(Math.round(engine.currentScale * 100) + '%');
     });
 
     this.elements.zoomInBtn.addEventListener('click', function () {
       engine.setScale(Math.round((engine.currentScale + 0.25) * 100) / 100);
+      showToast(Math.round(engine.currentScale * 100) + '%');
     });
 
     this.elements.fitWidthBtn.addEventListener('click', function () {
       engine.fitWidth();
+      showToast('\uB108\uBE44\uB9DE\uCDA4');
     });
 
     this.elements.fitPageBtn.addEventListener('click', function () {
       engine.fitPage();
+      showToast('\uD398\uC774\uC9C0\uB9DE\uCDA4');
     });
 
     // Spread mode (2-page view)
     this.elements.spreadBtn.addEventListener('click', function () {
       engine.toggleSpreadMode();
+      showToast(engine.spreadMode ? '\uD38C\uCE68\uBAA8\uB4DC \uCF1C\uAE30' : '\uD38C\uCE68\uBAA8\uB4DC \uB044\uAE30');
     });
 
     engine.addEventListener('spreadModeChanged', function (e) {
@@ -900,6 +907,7 @@
     // Comic mode
     this.elements.comicBtn.addEventListener('click', function () {
       engine.toggleComicMode();
+      showToast(engine.comicMode ? '\uB9CC\uD654\uCC45 \uBAA8\uB4DC \uCF1C\uAE30' : '\uB9CC\uD654\uCC45 \uBAA8\uB4DC \uB044\uAE30');
     });
 
     engine.addEventListener('comicModeChanged', function (e) {
@@ -909,10 +917,12 @@
     // Rotate
     this.elements.rotateBtn.addEventListener('click', function () {
       engine.setRotation(engine.rotation + 90);
+      showToast('\uD68C\uC804 ' + (engine.rotation % 360) + '\u00B0');
     });
 
     // Print
     this.elements.printBtn.addEventListener('click', function () {
+      showToast('\uC778\uC1C4 \uC900\uBE44 \uC911...');
       self.handlePrint();
     });
 
@@ -922,12 +932,17 @@
       var isDark = document.body.classList.contains('dark-mode');
       localStorage.setItem('pdfviewer_darkmode', isDark);
       self.updateDarkModeIcon(isDark);
+      showToast(isDark ? '\uB2E4\uD06C\uBAA8\uB4DC \uCF1C\uAE30' : '\uB2E4\uD06C\uBAA8\uB4DC \uB044\uAE30');
     });
 
     // Memo color palette
     if (this.elements.memoColorBtn) {
       this.elements.memoColorBtn.addEventListener('click', function (e) {
         e.stopPropagation();
+        var saveDD = $('#save-dropdown');
+        if (saveDD) saveDD.classList.add('hidden');
+        self.toggleBoxColorDropdown(false);
+        self.toggleUnderlineDropdown(false);
         self.toggleMemoColorDropdown();
       });
     }
@@ -938,9 +953,17 @@
           e.stopPropagation();
           engine.emit('memoColorChanged', { color: swatch.dataset.color });
           self.updateMemoColorIndicator(swatch.dataset.color);
-          self.toggleMemoColorDropdown(false);
+          // Keep dropdown open — user clicks [확인] to close
         });
       });
+      // Confirm button closes dropdown
+      var memoConfirmBtn = this.elements.memoColorDropdown.querySelector('.dropdown-confirm-btn');
+      if (memoConfirmBtn) {
+        memoConfirmBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          self.toggleMemoColorDropdown(false);
+        });
+      }
       // Close dropdown when clicking outside
       document.addEventListener('mousedown', function (e) {
         if (!self.elements.memoColorBtn.parentElement.contains(e.target)) {
@@ -978,6 +1001,10 @@
     if (this.elements.boxColorBtn) {
       this.elements.boxColorBtn.addEventListener('click', function (e) {
         e.stopPropagation();
+        var saveDD = $('#save-dropdown');
+        if (saveDD) saveDD.classList.add('hidden');
+        self.toggleMemoColorDropdown(false);
+        self.toggleUnderlineDropdown(false);
         self.toggleBoxColorDropdown();
       });
     }
@@ -1042,6 +1069,15 @@
         });
       });
 
+      // Confirm button closes dropdown
+      var boxConfirmBtn = this.elements.boxColorDropdown.querySelector('.dropdown-confirm-btn');
+      if (boxConfirmBtn) {
+        boxConfirmBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          self.toggleBoxColorDropdown(false);
+        });
+      }
+
       // Close on outside click
       document.addEventListener('mousedown', function (e) {
         if (self.elements.boxColorBtn && !self.elements.boxColorBtn.parentElement.contains(e.target)) {
@@ -1055,6 +1091,10 @@
     if (this.elements.underlineBtn) {
       this.elements.underlineBtn.addEventListener('click', function (e) {
         e.stopPropagation();
+        var saveDD = $('#save-dropdown');
+        if (saveDD) saveDD.classList.add('hidden');
+        self.toggleMemoColorDropdown(false);
+        self.toggleBoxColorDropdown(false);
         self.toggleUnderlineDropdown();
       });
     }
@@ -1068,7 +1108,7 @@
           btn.classList.add('active');
           var mode = btn.dataset.mode;
           engine.emit('setDrawTool', { tool: 'underline-' + mode });
-          self.toggleUnderlineDropdown(false);
+          // Keep dropdown open — user clicks [확인] to close
           self.updateUnderlineIndicator();
         });
       });
@@ -1097,6 +1137,15 @@
         });
       });
 
+      // Confirm button closes dropdown
+      var ulConfirmBtn = this.elements.underlineDropdown.querySelector('.dropdown-confirm-btn');
+      if (ulConfirmBtn) {
+        ulConfirmBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          self.toggleUnderlineDropdown(false);
+        });
+      }
+
       // Close on outside click
       document.addEventListener('mousedown', function (e) {
         if (self.elements.underlineBtn && !self.elements.underlineBtn.parentElement.contains(e.target)) {
@@ -1114,11 +1163,24 @@
       if (self.elements.underlineBtn) {
         self.elements.underlineBtn.classList.toggle('active-toggle', tool.indexOf('underline') === 0);
       }
+      // Update tool status indicator
+      if (self.elements.toolStatus) {
+        var statusText = '\uC6B0\uD074\uB9AD: \uBA54\uBAA8';
+        if (tool === 'box') {
+          statusText = '\uC6B0\uD074\uB9AD: \uBA54\uBAA8 | \uC88C\uD074\uB9AD: \uC0C1\uC790';
+        } else if (tool.indexOf('underline') === 0) {
+          statusText = '\uC6B0\uD074\uB9AD: \uBA54\uBAA8 | \uC88C\uD074\uB9AD: \uBC11\uC904';
+        }
+        self.elements.toolStatus.textContent = statusText;
+      }
     });
 
     // Sidebar toggle
     this.elements.sidebarBtn.addEventListener('click', function () {
       engine.emit('toggleSidebar');
+      var sidebar = $('#sidebar');
+      var isOpen = sidebar && !sidebar.classList.contains('collapsed');
+      showToast(isOpen ? '\uC0AC\uC774\uB4DC\uBC14 \uC5F4\uAE30' : '\uC0AC\uC774\uB4DC\uBC14 \uB2EB\uAE30');
     });
 
     // Search toggle
@@ -1151,12 +1213,30 @@
       this.updateDarkModeIcon(true);
     }
 
+    // Toggle annotations visibility
+    this.annotationsVisible = true;
+    if (this.elements.toggleAnnotationsBtn) {
+      this.elements.toggleAnnotationsBtn.addEventListener('click', function () {
+        self.annotationsVisible = !self.annotationsVisible;
+        var layers = document.querySelectorAll('.custom-annotations');
+        layers.forEach(function (layer) {
+          layer.classList.toggle('annotations-hidden', !self.annotationsVisible);
+        });
+        self.elements.toggleAnnotationsBtn.classList.toggle('active-toggle', !self.annotationsVisible);
+        showToast(self.annotationsVisible ? '\uAFB8\uBC08 \uD45C\uC2DC' : '\uAFB8\uBC08 \uC228\uAE40');
+      });
+    }
+
     // Save button — toggle dropdown
     if (this.elements.saveBtn) {
       var saveDropdown = $('#save-dropdown');
       this.elements.saveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         if (saveDropdown) {
+          // Close other dropdowns first
+          self.toggleMemoColorDropdown(false);
+          self.toggleBoxColorDropdown(false);
+          self.toggleUnderlineDropdown(false);
           saveDropdown.classList.toggle('hidden');
         } else {
           engine.emit('explicitSave');
@@ -1179,6 +1259,10 @@
         document.addEventListener('click', function () {
           saveDropdown.classList.add('hidden');
         });
+        // Esc key closes save dropdown
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') saveDropdown.classList.add('hidden');
+        });
       }
     }
 
@@ -1186,6 +1270,7 @@
     if (this.elements.deleteSelectedBtn) {
       this.elements.deleteSelectedBtn.addEventListener('click', function () {
         engine.emit('deleteSelected');
+        showToast('\uC120\uD0DD\uD55C \uD56D\uBAA9\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4');
       });
     }
 
@@ -1327,6 +1412,7 @@
     toolbar.classList.toggle('toolbar-labels-mode');
     var isOn = toolbar.classList.contains('toolbar-labels-mode');
     localStorage.setItem('pdfviewer_labelsMode', isOn);
+    showToast(isOn ? '\uD14D\uC2A4\uD2B8 \uBAA8\uB4DC' : '\uC544\uC774\uCF58 \uBAA8\uB4DC');
   };
 
   Toolbar.prototype.toggleBoxColorDropdown = function (forceState) {
@@ -1950,17 +2036,19 @@
     var am = this.annotations;
     if (!am) return;
 
-    var hasItems = (am.boxes && am.boxes.length > 0) || (am.underlines && am.underlines.length > 0);
+    var hasItems = (am.boxes && am.boxes.length > 0) || (am.underlines && am.underlines.length > 0) ||
+      (am.memos && am.memos.length > 0) || (am.emojis && am.emojis.length > 0);
 
     // Clear all button
     var clearAllBtn = createElement('button', 'deco-clear-all-btn', panel);
-    clearAllBtn.textContent = '전체 삭제 (메모+상자+밑줄)';
+    clearAllBtn.textContent = '\uC804\uCCB4 \uC0AD\uC81C (\uBA54\uBAA8+\uC0C1\uC790+\uBC11\uC904+\uC774\uBAA8\uD2F0\uCF58)';
     clearAllBtn.addEventListener('click', function () {
-      if (!confirm('모든 메모, 상자, 밑줄을 삭제하시겠습니까?')) return;
+      if (!confirm('\uBAA8\uB4E0 \uBA54\uBAA8, \uC0C1\uC790, \uBC11\uC904, \uC774\uBAA8\uD2F0\uCF58\uC744 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?')) return;
       am.memos = [];
       am.boxes = [];
       am.underlines = [];
       am.highlights = [];
+      am.emojis = [];
       am.save();
       // Re-render all visible pages
       var wrappers = am.engine.viewerContainer.querySelectorAll('.page-wrapper');
@@ -1968,6 +2056,8 @@
         var annotLayer = w.querySelector('.custom-annotations');
         if (annotLayer) annotLayer.innerHTML = '';
       });
+      self.renderDecorations();
+      showToast('\uBAA8\uB4E0 \uAFB8\uBC08\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4');
     });
 
     if (!hasItems) {
@@ -1976,15 +2066,21 @@
       return;
     }
 
-    // Combine boxes and underlines, sort by createdAt
+    // Combine all annotation types, sort by createdAt
     var items = [];
+    if (am.memos) {
+      am.memos.forEach(function (m) { items.push({ type: 'memo', data: m }); });
+    }
     if (am.boxes) {
       am.boxes.forEach(function (b) { items.push({ type: 'box', data: b }); });
     }
     if (am.underlines) {
       am.underlines.forEach(function (u) { items.push({ type: 'underline', data: u }); });
     }
-    items.sort(function (a, b) { return a.data.createdAt - b.data.createdAt; });
+    if (am.emojis) {
+      am.emojis.forEach(function (em) { items.push({ type: 'emoji', data: em }); });
+    }
+    items.sort(function (a, b) { return (a.data.createdAt || 0) - (b.data.createdAt || 0); });
 
     var list = createElement('ul', 'deco-list', panel);
     var decoSelectedIds = new Set();
@@ -2010,17 +2106,37 @@
         if (borderColor !== 'none') {
           colorPreview.style.border = '2px solid ' + (colorWithOpacity(borderColor, borderOpacity) || BOX_BORDER_COLORS[borderColor] || 'transparent');
         }
-      } else {
+      } else if (item.type === 'underline') {
         colorPreview.classList.add('underline-type');
         colorPreview.style.background = UNDERLINE_COLORS[item.data.color] || UNDERLINE_COLORS.red;
+      } else if (item.type === 'memo') {
+        colorPreview.textContent = '\uD83D\uDCDD';
+        colorPreview.style.fontSize = '14px';
+        colorPreview.style.background = 'transparent';
+        colorPreview.style.textAlign = 'center';
+        colorPreview.style.lineHeight = '14px';
+      } else if (item.type === 'emoji') {
+        colorPreview.textContent = item.data.emoji || '\uD83D\uDE00';
+        colorPreview.style.fontSize = '14px';
+        colorPreview.style.background = 'transparent';
+        colorPreview.style.textAlign = 'center';
+        colorPreview.style.lineHeight = '14px';
       }
 
       // Info
       var info = createElement('div', 'deco-list-info', li);
       var pageTxt = createElement('span', 'deco-list-page', info);
-      pageTxt.textContent = item.data.pageNum + '페이지';
-      var typeTxt = document.createTextNode(' · ' + (item.type === 'box' ? '상자' : (item.data.type === 'straight' ? '직선' : '자유선')));
+      pageTxt.textContent = item.data.pageNum + '\uD398\uC774\uC9C0';
+      var typeLabel = item.type === 'box' ? '\uC0C1\uC790' :
+        item.type === 'underline' ? (item.data.type === 'straight' ? '\uC9C1\uC120' : '\uC790\uC720\uC120') :
+        item.type === 'memo' ? '\uBA54\uBAA8' : '\uC774\uBAA8\uD2F0\uCF58';
+      var typeTxt = document.createTextNode(' \u00B7 ' + typeLabel);
       info.appendChild(typeTxt);
+      // Show memo text preview
+      if (item.type === 'memo' && item.data.text) {
+        var preview = document.createTextNode(' \u00B7 ' + item.data.text.substring(0, 20));
+        info.appendChild(preview);
+      }
 
       // Click → navigate + select annotation on page
       li.addEventListener('click', function (e) {
@@ -2058,15 +2174,24 @@
 
       // Delete button
       var delBtn = createElement('button', 'deco-list-delete', li);
-      delBtn.textContent = '×';
-      delBtn.title = '삭제';
+      delBtn.textContent = '\u00D7';
+      delBtn.title = '\uC0AD\uC81C';
       delBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         if (item.type === 'box') {
           am.removeBox(item.data.id);
-        } else {
+        } else if (item.type === 'underline') {
           am.removeUnderline(item.data.id);
+        } else if (item.type === 'memo') {
+          am.memos = am.memos.filter(function (m) { return m.id !== item.data.id; });
+          am.save();
+          am.renderAnnotationsForPage(item.data.pageNum);
+        } else if (item.type === 'emoji') {
+          am.emojis = am.emojis.filter(function (em) { return em.id !== item.data.id; });
+          am.save();
+          am.renderAnnotationsForPage(item.data.pageNum);
         }
+        self.renderDecorations();
       });
     });
 
@@ -2080,10 +2205,20 @@
           var found = items.find(function (it) { return it.data.id === id; });
           if (found) {
             if (found.type === 'box') am.removeBox(id);
-            else am.removeUnderline(id);
+            else if (found.type === 'underline') am.removeUnderline(id);
+            else if (found.type === 'memo') {
+              am.memos = am.memos.filter(function (m) { return m.id !== id; });
+              am.save();
+              am.renderAnnotationsForPage(found.data.pageNum);
+            } else if (found.type === 'emoji') {
+              am.emojis = am.emojis.filter(function (em) { return em.id !== id; });
+              am.save();
+              am.renderAnnotationsForPage(found.data.pageNum);
+            }
           }
         });
         decoSelectedIds.clear();
+        self.renderDecorations();
       }
     });
     panel.tabIndex = 0; // Make focusable for keydown
@@ -2476,8 +2611,16 @@
     var vc = this.engine.viewerContainer;
     if (tool !== 'none') {
       vc.style.cursor = 'crosshair';
+      // Disable textLayer to allow drawing through it
+      vc.querySelectorAll('.textLayer').forEach(function (tl) {
+        tl.style.pointerEvents = 'none';
+      });
     } else {
       vc.style.cursor = '';
+      // Restore textLayer
+      vc.querySelectorAll('.textLayer').forEach(function (tl) {
+        tl.style.pointerEvents = '';
+      });
     }
     // Guide toast
     var guideMessages = {
@@ -4224,10 +4367,10 @@
   };
 
   PDFViewerApp.prototype.saveCapturedPDF = function () {
-    if (this.capturedPages.length === 0) { showToast('캡쳐된 페이지가 없습니다.'); return; }
+    if (this.capturedPages.length === 0) { showToast('\uCEA1\uCCD0\uB41C \uD398\uC774\uC9C0\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.'); return; }
 
     if (typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined') {
-      showToast('jsPDF 라이브러리를 로드할 수 없습니다.');
+      showToast('jsPDF \uB77C\uC774\uBE0C\uB7EC\uB9AC\uB97C \uB85C\uB4DC\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.');
       return;
     }
 
@@ -4252,11 +4395,28 @@
       pdf.addImage(imgData, 'JPEG', 0, 0, this.capturedPages[i].width, this.capturedPages[i].height);
     }
 
-    var filename = prompt('\uD30C\uC77C \uC774\uB984', 'captured-' + new Date().toISOString().slice(0, 10) + '.pdf');
-    if (!filename) return;
-    if (!filename.endsWith('.pdf')) filename += '.pdf';
-    pdf.save(filename);
-    showToast('PDF \uC800\uC7A5 \uC644\uB8CC');
+    var defaultName = 'captured-' + new Date().toISOString().slice(0, 10) + '.pdf';
+
+    if (window.showSaveFilePicker) {
+      window.showSaveFilePicker({
+        suggestedName: defaultName,
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
+      }).then(function (handle) {
+        return handle.createWritable().then(function (writable) {
+          return writable.write(pdf.output('blob')).then(function () {
+            return writable.close();
+          }).then(function () {
+            showToast('\uC800\uC7A5 \uC644\uB8CC: ' + handle.name);
+          });
+        });
+      }).catch(function () { /* cancelled */ });
+    } else {
+      var filename = prompt('\uD30C\uC77C \uC774\uB984', defaultName);
+      if (!filename) return;
+      if (!filename.endsWith('.pdf')) filename += '.pdf';
+      pdf.save(filename);
+      showToast('PDF \uC800\uC7A5 \uC644\uB8CC');
+    }
   };
 
   PDFViewerApp.prototype.saveAsAnnotatedPDF = function () {
@@ -4266,37 +4426,60 @@
 
     var totalPages = pdfDoc.numPages;
     var defaultName = (this.engine.pdfFilename || 'document').replace(/\.pdf$/i, '') + '_annotated.pdf';
-    var filename = prompt('\uD30C\uC77C \uC774\uB984', defaultName);
-    if (!filename) return;
-    if (!filename.endsWith('.pdf')) filename += '.pdf';
 
-    showToast('\uD398\uC774\uC9C0 \uB80C\uB354\uB9C1 \uC911...');
+    function doExport(saveHandle, filename) {
+      showToast('\uD398\uC774\uC9C0 \uB80C\uB354\uB9C1 \uC911...');
 
-    var jsPDF = (window.jspdf || jspdf).jsPDF;
-    var promises = [];
+      var jsPDF = (window.jspdf || jspdf).jsPDF;
+      var promises = [];
 
-    for (var i = 1; i <= totalPages; i++) {
-      promises.push(this.renderPageForExport(i));
+      for (var i = 1; i <= totalPages; i++) {
+        promises.push(self.renderPageForExport(i));
+      }
+
+      Promise.all(promises).then(function (canvases) {
+        var first = canvases[0];
+        var pdf = new jsPDF({
+          orientation: first.width > first.height ? 'l' : 'p',
+          unit: 'px',
+          format: [first.width, first.height]
+        });
+
+        canvases.forEach(function (canvas, idx) {
+          if (idx > 0) {
+            pdf.addPage([canvas.width, canvas.height], canvas.width > canvas.height ? 'l' : 'p');
+          }
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, canvas.width, canvas.height);
+        });
+
+        if (saveHandle) {
+          saveHandle.createWritable().then(function (writable) {
+            return writable.write(pdf.output('blob')).then(function () {
+              return writable.close();
+            }).then(function () {
+              showToast('\uC800\uC7A5 \uC644\uB8CC: ' + saveHandle.name);
+            });
+          });
+        } else {
+          pdf.save(filename);
+          showToast('PDF \uC800\uC7A5 \uC644\uB8CC');
+        }
+      });
     }
 
-    Promise.all(promises).then(function (canvases) {
-      var first = canvases[0];
-      var pdf = new jsPDF({
-        orientation: first.width > first.height ? 'l' : 'p',
-        unit: 'px',
-        format: [first.width, first.height]
-      });
-
-      canvases.forEach(function (canvas, idx) {
-        if (idx > 0) {
-          pdf.addPage([canvas.width, canvas.height], canvas.width > canvas.height ? 'l' : 'p');
-        }
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, canvas.width, canvas.height);
-      });
-
-      pdf.save(filename);
-      showToast('PDF \uC800\uC7A5 \uC644\uB8CC');
-    });
+    if (window.showSaveFilePicker) {
+      window.showSaveFilePicker({
+        suggestedName: defaultName,
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
+      }).then(function (handle) {
+        doExport(handle, null);
+      }).catch(function () { /* cancelled */ });
+    } else {
+      var filename = prompt('\uD30C\uC77C \uC774\uB984', defaultName);
+      if (!filename) return;
+      if (!filename.endsWith('.pdf')) filename += '.pdf';
+      doExport(null, filename);
+    }
   };
 
   PDFViewerApp.prototype.renderPageForExport = function (pageNum) {
