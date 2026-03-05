@@ -197,3 +197,18 @@ body.dark-mode .toast-notification {
 body.dark-mode #url-bar { background: var(--bg-secondary); border-color: var(--border-color); }
 body.dark-mode #url-input { background: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color); }
 body.dark-mode #url-iframe-close { background: var(--bg-toolbar); color: var(--text-toolbar); }
+
+/* Annotation group */
+body.dark-mode .toolbar-group-annotation {
+  background: rgba(0, 160, 223, 0.06);
+  border-color: rgba(0, 160, 223, 0.15);
+}
+
+/* Delete button */
+body.dark-mode #btn-delete-selected { color: #ef5350; }
+
+/* Capture panel */
+body.dark-mode .capture-thumbnail-item:hover { background: rgba(0, 160, 223, 0.05); }
+
+/* Emoji grid */
+body.dark-mode .emoji-grid-btn:hover { background: rgba(0, 160, 223, 0.12); }

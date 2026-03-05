@@ -131,8 +131,33 @@
         </div>
       </div>
 
-      <!-- Box drawing tool -->
-      <div class="toolbar-group" style="position:relative;">
+      <!-- Drawing tools: Underline + Box (grouped) -->
+      <div class="toolbar-group toolbar-group-annotation" style="position:relative;">
+        <button class="toolbar-btn" id="btn-underline" title="밑줄">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z"/></svg>
+          <span id="underline-indicator"></span>
+          <span class="btn-label">밑줄</span>
+        </button>
+        <div id="underline-dropdown" class="underline-dropdown hidden">
+          <div class="underline-mode-row">
+            <button class="underline-mode-btn active" data-mode="straight" title="직선"><svg viewBox="0 0 24 24" width="16" height="16"><line x1="3" y1="17" x2="21" y2="17" stroke="currentColor" stroke-width="2"/></svg> 직선</button>
+            <button class="underline-mode-btn" data-mode="freehand" title="자유선"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 17c3-4 6 2 9-2s6 2 9-2"/></svg> 자유선</button>
+          </div>
+          <div class="underline-color-label">색상</div>
+          <div class="underline-color-row">
+            <div class="underline-color-swatch active" data-color="red" title="빨강"></div>
+            <div class="underline-color-swatch" data-color="blue" title="파랑"></div>
+            <div class="underline-color-swatch" data-color="green" title="초록"></div>
+            <div class="underline-color-swatch" data-color="yellow" title="노랑"></div>
+            <div class="underline-color-swatch" data-color="pink" title="분홍"></div>
+          </div>
+          <div class="underline-color-label">두께</div>
+          <div class="underline-width-row">
+            <button class="underline-width-btn" data-width="1">━</button>
+            <button class="underline-width-btn active" data-width="2">━━</button>
+            <button class="underline-width-btn" data-width="4">━━━</button>
+          </div>
+        </div>
         <button class="toolbar-btn" id="btn-box-draw" title="상자 그리기">
           <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
           <span class="btn-label">상자그리기</span>
@@ -189,39 +214,14 @@
         </div>
       </div>
 
-      <!-- Underline drawing tool -->
-      <div class="toolbar-group" style="position:relative;">
-        <button class="toolbar-btn" id="btn-underline" title="밑줄">
-          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z"/></svg>
-          <span id="underline-indicator"></span>
-          <span class="btn-label">밑줄</span>
-        </button>
-        <div id="underline-dropdown" class="underline-dropdown hidden">
-          <div class="underline-mode-row">
-            <button class="underline-mode-btn active" data-mode="straight" title="직선"><svg viewBox="0 0 24 24" width="16" height="16"><line x1="3" y1="17" x2="21" y2="17" stroke="currentColor" stroke-width="2"/></svg> 직선</button>
-            <button class="underline-mode-btn" data-mode="freehand" title="자유선"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 17c3-4 6 2 9-2s6 2 9-2"/></svg> 자유선</button>
-          </div>
-          <div class="underline-color-label">색상</div>
-          <div class="underline-color-row">
-            <div class="underline-color-swatch active" data-color="red" title="빨강"></div>
-            <div class="underline-color-swatch" data-color="blue" title="파랑"></div>
-            <div class="underline-color-swatch" data-color="green" title="초록"></div>
-            <div class="underline-color-swatch" data-color="yellow" title="노랑"></div>
-            <div class="underline-color-swatch" data-color="pink" title="분홍"></div>
-          </div>
-          <div class="underline-color-label">두께</div>
-          <div class="underline-width-row">
-            <button class="underline-width-btn" data-width="1">━</button>
-            <button class="underline-width-btn active" data-width="2">━━</button>
-            <button class="underline-width-btn" data-width="4">━━━</button>
-          </div>
-        </div>
-      </div>
-
       <div class="toolbar-spacer"></div>
 
-      <!-- Right side: Save, Search, Print, Dark mode -->
+      <!-- Right side: Delete, Save, Search, Print, Dark mode -->
       <div class="toolbar-group">
+        <button class="toolbar-btn hidden" id="btn-delete-selected" title="선택된 메모 삭제하기">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          <span class="btn-label">선택삭제</span>
+        </button>
         <button class="toolbar-btn" id="btn-save" title="저장 (Ctrl+S)">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm2 16H5V5h11.17L19 7.83V19zm-7-7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zM6 6h9v4H6V6z"/></svg>
           <span class="btn-label">저장</span>
@@ -275,12 +275,16 @@
         <button class="sidebar-tab-btn" data-tab="bookmarks">북마크</button>
         <button class="sidebar-tab-btn" data-tab="memos">메모</button>
         <button class="sidebar-tab-btn" data-tab="decorations">꾸밈</button>
+        <button class="sidebar-tab-btn" data-tab="capture">캡쳐</button>
+        <button class="sidebar-tab-btn" data-tab="emoji">이모티콘</button>
       </div>
       <div id="panel-thumbnails" class="sidebar-panel"></div>
       <div id="panel-outline" class="sidebar-panel hidden"></div>
       <div id="panel-bookmarks" class="sidebar-panel hidden"></div>
       <div id="panel-memos" class="sidebar-panel hidden"></div>
       <div id="panel-decorations" class="sidebar-panel hidden"></div>
+      <div id="panel-capture" class="sidebar-panel hidden"></div>
+      <div id="panel-emoji" class="sidebar-panel hidden"></div>
       <div class="sidebar-resize-handle"></div>
     </div>
 
@@ -301,6 +305,7 @@
 
   <!-- PDF.js 3.x -->
   <script src="vendor/pdfjs/pdf.min.js"></script>
+  <script src="vendor/jspdf/jspdf.umd.min.js"></script>
   <script src="js/bundle.js"></script>
 </body>
 </html>

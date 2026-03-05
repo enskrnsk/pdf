@@ -212,6 +212,12 @@
   StorageManager.prototype.loadUnderlines = function (docKey) {
     return this._load(docKey, 'underlines') || [];
   };
+  StorageManager.prototype.saveEmojis = function (docKey, emojis) {
+    this._save(docKey, 'emojis', emojis);
+  };
+  StorageManager.prototype.loadEmojis = function (docKey) {
+    return this._load(docKey, 'emojis') || [];
+  };
   StorageManager.prototype.saveBookmarks = function (docKey, bookmarks) {
     this._save(docKey, 'bookmarks', bookmarks);
   };
@@ -823,6 +829,7 @@
       urlInput: $('#url-input'),
       urlGo: $('#url-go'),
       urlClose: $('#url-close'),
+      deleteSelectedBtn: $('#btn-delete-selected'),
     };
 
     this.bindEvents();
@@ -1151,6 +1158,21 @@
       });
     }
 
+    // Delete selected button
+    if (this.elements.deleteSelectedBtn) {
+      this.elements.deleteSelectedBtn.addEventListener('click', function () {
+        engine.emit('deleteSelected');
+      });
+    }
+
+    // Show/hide delete button based on selection
+    engine.addEventListener('selectionChanged', function (e) {
+      var btn = self.elements.deleteSelectedBtn;
+      if (btn) {
+        btn.classList.toggle('hidden', e.detail.count === 0);
+      }
+    });
+
     // URL opener
     if (this.elements.urlBtn) {
       this.elements.urlBtn.addEventListener('click', function () {
@@ -1395,6 +1417,8 @@
       bookmarks: $('#panel-bookmarks'),
       memos: $('#panel-memos'),
       decorations: $('#panel-decorations'),
+      capture: $('#panel-capture'),
+      emoji: $('#panel-emoji'),
     };
 
     this.tabBtns.forEach(function (btn) {
@@ -1427,6 +1451,9 @@
       self.renderMemos();
       self.renderDecorations();
     });
+
+    // Render emoji panel
+    this.renderEmojiPanel();
 
     // Setup sidebar resize handle
     this.setupResizeHandle();
@@ -1773,6 +1800,74 @@
         });
       })(sorted[i]);
     }
+  };
+
+  // ---- Capture panel ----
+  Sidebar.prototype.renderCapturePanel = function () {
+    var self = this;
+    var panel = this.panels.capture;
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    var iframeContainer = document.getElementById('url-iframe-container');
+    if (iframeContainer) {
+      var captureBtn = createElement('button', 'capture-webpage-btn', panel);
+      captureBtn.textContent = '\uC6F9\uD398\uC774\uC9C0 \uCEA1\uCCD0';
+      captureBtn.addEventListener('click', function () {
+        self.engine.emit('captureWebpage');
+      });
+    }
+
+    // Show captured pages list
+    if (this.app && this.app.capturedPages && this.app.capturedPages.length > 0) {
+      var countLabel = createElement('div', 'capture-count', panel);
+      countLabel.textContent = '\uCEA1\uCCD0 ' + this.app.capturedPages.length + '\uD398\uC774\uC9C0';
+      this.app.capturedPages.forEach(function (canvas, idx) {
+        var item = createElement('div', 'capture-thumbnail-item', panel);
+        var thumbCanvas = createElement('canvas', 'capture-thumbnail', item);
+        var thumbWidth = 140;
+        var ratio = canvas.height / canvas.width;
+        var thumbHeight = Math.round(thumbWidth * ratio);
+        thumbCanvas.width = thumbWidth;
+        thumbCanvas.height = thumbHeight;
+        thumbCanvas.style.width = thumbWidth + 'px';
+        thumbCanvas.style.height = thumbHeight + 'px';
+        var ctx = thumbCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, 0, thumbWidth, thumbHeight);
+        var label = createElement('span', 'capture-thumbnail-label', item);
+        label.textContent = (idx + 1) + '';
+      });
+    } else if (!iframeContainer) {
+      var empty = createElement('div', 'panel-empty', panel);
+      empty.textContent = '\uCEA1\uCCD0\uB41C \uD398\uC774\uC9C0\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4';
+    }
+  };
+
+  // ---- Emoji panel ----
+  Sidebar.prototype.renderEmojiPanel = function () {
+    var self = this;
+    var panel = this.panels.emoji;
+    if (!panel) return;
+    if (panel.querySelector('.emoji-grid')) return; // already rendered
+    panel.innerHTML = '';
+
+    var emojis = [
+      '\uD83D\uDE00', '\uD83D\uDE02', '\uD83D\uDE0D', '\uD83E\uDD70', '\uD83D\uDE0E', '\uD83E\uDD14', '\uD83D\uDE22', '\uD83D\uDE21',
+      '\uD83D\uDC4D', '\uD83D\uDC4E', '\uD83D\uDC4F', '\u2764\uFE0F', '\u2B50', '\uD83D\uDD25', '\u2705', '\u274C',
+      '\u26A0\uFE0F', '\uD83D\uDCA1', '\uD83D\uDCCC', '\uD83D\uDCCE', '\uD83C\uDFAF', '\uD83C\uDFC6', '\uD83C\uDF89', '\uD83D\uDCAC',
+      '\u2753', '\u2757', '\u27A1\uFE0F', '\u2B05\uFE0F', '\u2B06\uFE0F', '\u2B07\uFE0F', '\uD83D\uDD34', '\uD83D\uDFE2',
+      '\uD83D\uDFE1', '\uD83D\uDD35', '\u26AB', '\u26AA', '\uD83D\uDFE4', '\uD83D\uDFE0', '\uD83D\uDFE3', '\uD83D\uDC9C',
+    ];
+
+    var grid = createElement('div', 'emoji-grid', panel);
+    emojis.forEach(function (emoji) {
+      var btn = createElement('button', 'emoji-grid-btn', grid);
+      btn.textContent = emoji;
+      btn.title = emoji;
+      btn.addEventListener('click', function () {
+        self.engine.emit('placeEmoji', { emoji: emoji });
+      });
+    });
   };
 
   // ---- Sidebar resize handle ----
@@ -2226,6 +2321,9 @@
     this.underlineWidth = 2;
     this.freehandPoints = [];
     this.freehandSvgPath = null;
+    // Emoji annotations
+    this.emojis = [];
+    this.emojiDragState = null;
     // Selection state
     this.selectedAnnotations = new Set();
     // Selection drag state
@@ -2370,6 +2468,7 @@
       this.selectedAnnotations.add(id);
       this.updateSelectionVisual(id, true);
     }
+    this.engine.emit('selectionChanged', { count: this.selectedAnnotations.size });
   };
 
   AnnotationManager.prototype.clearSelection = function () {
@@ -2378,6 +2477,7 @@
       self.updateSelectionVisual(id, false);
     });
     this.selectedAnnotations.clear();
+    this.engine.emit('selectionChanged', { count: 0 });
   };
 
   AnnotationManager.prototype.updateSelectionVisual = function (id, selected) {
@@ -2394,6 +2494,177 @@
     // Underline (SVG)
     var ulEl = vc.querySelector('[data-underline-id="' + id + '"]');
     if (ulEl) { ulEl.classList.toggle('annotation-selected', selected); return; }
+    // Emoji
+    var emojiEl = vc.querySelector('[data-emoji-id="' + id + '"]');
+    if (emojiEl) { emojiEl.classList.toggle('annotation-selected', selected); return; }
+  };
+
+  // ---- Emoji annotations ----
+  AnnotationManager.prototype.addEmoji = function (emoji) {
+    var pageNum = this.engine.currentPage || 1;
+    var pw = document.querySelector('.page-wrapper[data-page="' + pageNum + '"]');
+    if (!pw) return;
+
+    var emojiObj = {
+      id: 'emoji_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      pageNum: pageNum,
+      emoji: emoji,
+      x: 0.4,
+      y: 0.4,
+      size: 0.08,
+      rotation: 0,
+      createdAt: Date.now()
+    };
+    this.emojis.push(emojiObj);
+    this.renderEmojiOnPage(emojiObj, pw);
+    this.saveEmojis();
+    showToast(emoji + ' 배치됨');
+  };
+
+  AnnotationManager.prototype.renderEmojiOnPage = function (emojiObj, pw) {
+    var self = this;
+    var annotLayer = pw.querySelector('.custom-annotations');
+    if (!annotLayer) return;
+
+    var el = document.createElement('div');
+    el.className = 'emoji-annotation';
+    el.setAttribute('data-emoji-id', emojiObj.id);
+    el.style.left = (emojiObj.x * 100) + '%';
+    el.style.top = (emojiObj.y * 100) + '%';
+    el.style.fontSize = (emojiObj.size * pw.offsetWidth) + 'px';
+    el.style.transform = 'rotate(' + (emojiObj.rotation || 0) + 'deg)';
+    el.textContent = emojiObj.emoji;
+
+    // Resize handles (4 corners)
+    var corners = ['nw', 'ne', 'sw', 'se'];
+    corners.forEach(function (pos) {
+      var handle = document.createElement('div');
+      handle.className = 'emoji-resize-handle emoji-handle-' + pos;
+      handle.setAttribute('data-handle', pos);
+      el.appendChild(handle);
+    });
+
+    // Rotate handle (top center)
+    var rotHandle = document.createElement('div');
+    rotHandle.className = 'emoji-rotate-handle';
+    el.appendChild(rotHandle);
+
+    // Drag interaction
+    el.addEventListener('mousedown', function (e) {
+      if (e.target.classList.contains('emoji-resize-handle') || e.target.classList.contains('emoji-rotate-handle')) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Selection
+      if (e.ctrlKey || e.metaKey) {
+        self.selectAnnotation(emojiObj.id, true);
+      } else {
+        self.selectAnnotation(emojiObj.id, false);
+      }
+
+      var rect = pw.getBoundingClientRect();
+      var startX = e.clientX;
+      var startY = e.clientY;
+      var origX = emojiObj.x;
+      var origY = emojiObj.y;
+
+      function onMove(ev) {
+        var dx = (ev.clientX - startX) / rect.width;
+        var dy = (ev.clientY - startY) / rect.height;
+        emojiObj.x = Math.max(0, Math.min(1, origX + dx));
+        emojiObj.y = Math.max(0, Math.min(1, origY + dy));
+        el.style.left = (emojiObj.x * 100) + '%';
+        el.style.top = (emojiObj.y * 100) + '%';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        self.saveEmojis();
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // Resize interaction
+    el.querySelectorAll('.emoji-resize-handle').forEach(function (handle) {
+      handle.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var startX = e.clientX;
+        var origSize = emojiObj.size;
+
+        function onMove(ev) {
+          var dx = (ev.clientX - startX) / pw.offsetWidth;
+          var pos = handle.getAttribute('data-handle');
+          var delta = (pos === 'nw' || pos === 'sw') ? -dx : dx;
+          emojiObj.size = Math.max(0.02, Math.min(0.3, origSize + delta));
+          el.style.fontSize = (emojiObj.size * pw.offsetWidth) + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          self.saveEmojis();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+
+    // Rotate interaction
+    var rotateHandle = el.querySelector('.emoji-rotate-handle');
+    if (rotateHandle) {
+      rotateHandle.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var elRect = el.getBoundingClientRect();
+        var cx = elRect.left + elRect.width / 2;
+        var cy = elRect.top + elRect.height / 2;
+
+        function onMove(ev) {
+          var angle = Math.atan2(ev.clientX - cx, -(ev.clientY - cy)) * (180 / Math.PI);
+          emojiObj.rotation = Math.round(angle);
+          el.style.transform = 'rotate(' + emojiObj.rotation + 'deg)';
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          self.saveEmojis();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+
+    // Right-click to remove
+    el.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (confirm(emojiObj.emoji + ' 삭제?')) {
+        self.removeEmoji(emojiObj.id);
+      }
+    });
+
+    annotLayer.appendChild(el);
+  };
+
+  AnnotationManager.prototype.removeEmoji = function (id) {
+    this.emojis = this.emojis.filter(function (em) { return em.id !== id; });
+    var el = document.querySelector('[data-emoji-id="' + id + '"]');
+    if (el) el.remove();
+    this.saveEmojis();
+  };
+
+  AnnotationManager.prototype.renderAllEmojis = function () {
+    var self = this;
+    this.emojis.forEach(function (emojiObj) {
+      var pw = document.querySelector('.page-wrapper[data-page="' + emojiObj.pageNum + '"]');
+      if (pw) self.renderEmojiOnPage(emojiObj, pw);
+    });
+  };
+
+  AnnotationManager.prototype.saveEmojis = function () {
+    if (!this.docKey) return;
+    this.storage.saveEmojis(this.docKey, this.emojis);
   };
 
   AnnotationManager.prototype.deleteSelected = function () {
@@ -2411,8 +2682,12 @@
       if (memoIdx !== -1) { self.removeAreaMemo(id); return; }
       var hlIdx = self.highlights.findIndex(function (h) { return h.id === id; });
       if (hlIdx !== -1) { self.removeHighlight(id); return; }
+      // Emoji
+      var emojiIdx = self.emojis.findIndex(function (em) { return em.id === id; });
+      if (emojiIdx !== -1) { self.removeEmoji(id); return; }
     });
     this.selectedAnnotations.clear();
+    this.engine.emit('selectionChanged', { count: 0 });
   };
 
   AnnotationManager.prototype.startSelectionDrag = function (e, pageWrapper) {
@@ -3371,6 +3646,7 @@
     this.storage.saveMemos(this.docKey, this.memos);
     this.storage.saveBoxes(this.docKey, this.boxes);
     this.storage.saveUnderlines(this.docKey, this.underlines);
+    this.storage.saveEmojis(this.docKey, this.emojis);
     this.engine.emit('memosChanged');
   };
 
@@ -3380,6 +3656,7 @@
     this.storage = new StorageManager();
     this.toolbar = new Toolbar(this.engine);
     this.sidebar = new Sidebar(this.engine, this.storage);
+    this.sidebar.app = this;
     this.search = new SearchController(this.engine);
     this.annotations = new AnnotationManager(this.engine, this.storage);
     this.fileInput = document.getElementById('file-input');
@@ -3406,14 +3683,44 @@
 
     // Save button
     this.engine.addEventListener('explicitSave', function () {
-      self.annotations.save();
-      self.saveViewState();
-      showToast('\uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.');
+      if (self.capturedPages && self.capturedPages.length > 0) {
+        self.saveCapturedPDF();
+      } else {
+        self.annotations.save();
+        self.saveViewState();
+        showToast('\uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.');
+      }
+    });
+
+    // Delete selected annotations
+    this.engine.addEventListener('deleteSelected', function () {
+      self.annotations.deleteSelected();
     });
 
     // URL opener
     this.engine.addEventListener('openUrl', function (e) {
       self.openUrl(e.detail.url);
+    });
+
+    // Capture webpage
+    this.engine.addEventListener('captureWebpage', function () {
+      self.captureWebpage();
+    });
+
+    // Place emoji
+    this.engine.addEventListener('placeEmoji', function (e) {
+      self.annotations.addEmoji(e.detail.emoji);
+    });
+
+    // Capture system
+    this.capturedPages = [];
+
+    // Warn before leaving if captures exist
+    window.addEventListener('beforeunload', function (e) {
+      if (self.capturedPages.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     });
   };
 
@@ -3678,8 +3985,183 @@
   };
 
   // Open URL in iframe
+  PDFViewerApp.prototype.captureWebpage = function () {
+    var iframe = document.querySelector('#url-iframe-container iframe');
+    if (!iframe) { showToast('캡쳐할 웹페이지가 없습니다.'); return; }
+
+    var self = this;
+    try {
+      var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      // Same-origin: use html2canvas-like approach via foreignObject SVG
+      var body = iframeDoc.body;
+      var w = iframe.clientWidth;
+      var h = iframe.clientHeight;
+      var scrollY = iframeDoc.documentElement.scrollTop || body.scrollTop;
+
+      var canvas = document.createElement('canvas');
+      canvas.width = w * 2;
+      canvas.height = h * 2;
+      var ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+
+      // Serialize visible portion to SVG foreignObject
+      var serializer = new XMLSerializer();
+      var clone = iframeDoc.documentElement.cloneNode(true);
+      var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+        '<foreignObject width="100%" height="100%">' +
+        serializer.serializeToString(clone) +
+        '</foreignObject></svg>';
+
+      var img = new Image();
+      img.onload = function () {
+        ctx.drawImage(img, 0, 0);
+        self.addCapturedPage(canvas);
+      };
+      img.onerror = function () {
+        // Fallback to placeholder
+        self.createPlaceholderCapture(iframe.src, w, h);
+      };
+      var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+      img.src = URL.createObjectURL(blob);
+    } catch (e) {
+      // Cross-origin: create placeholder
+      this.createPlaceholderCapture(iframe.src, iframe.clientWidth, iframe.clientHeight);
+    }
+  };
+
+  PDFViewerApp.prototype.createPlaceholderCapture = function (url, w, h) {
+    var canvas = document.createElement('canvas');
+    canvas.width = w * 2;
+    canvas.height = h * 2;
+    var ctx = canvas.getContext('2d');
+    ctx.scale(2, 2);
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+
+    // Border
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+
+    // Globe icon
+    ctx.fillStyle = '#999999';
+    ctx.font = '48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('\uD83C\uDF10', w / 2, h / 2 - 30);
+
+    // URL text
+    ctx.fillStyle = '#333333';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(url.length > 60 ? url.substring(0, 57) + '...' : url, w / 2, h / 2 + 20);
+
+    // Info text
+    ctx.fillStyle = '#999999';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('크로스 오리진 보안 제한으로 플레이스홀더로 캡쳐됩니다.', w / 2, h / 2 + 50);
+
+    this.addCapturedPage(canvas);
+    showToast('보안 제한으로 플레이스홀더로 캡쳐되었습니다.');
+  };
+
+  PDFViewerApp.prototype.addCapturedPage = function (canvas) {
+    this.capturedPages.push(canvas);
+    var pageNum = this.capturedPages.length;
+    showToast('페이지 ' + pageNum + ' 캡쳐 완료');
+    this.displayCapturedPages();
+    this.sidebar.renderCapturePanel();
+  };
+
+  PDFViewerApp.prototype.displayCapturedPages = function () {
+    var container = $('#viewer-container');
+    // Remove existing captured page wrappers
+    container.querySelectorAll('.captured-page-wrapper').forEach(function (el) { el.remove(); });
+
+    var iframeContainer = document.getElementById('url-iframe-container');
+
+    for (var i = 0; i < this.capturedPages.length; i++) {
+      var wrapper = document.createElement('div');
+      wrapper.className = 'captured-page-wrapper';
+      wrapper.setAttribute('data-capture-page', i + 1);
+
+      var label = document.createElement('div');
+      label.className = 'captured-page-label';
+      label.textContent = '캡쳐 페이지 ' + (i + 1);
+      wrapper.appendChild(label);
+
+      var canvasClone = document.createElement('canvas');
+      canvasClone.width = this.capturedPages[i].width;
+      canvasClone.height = this.capturedPages[i].height;
+      canvasClone.style.width = '100%';
+      canvasClone.style.height = 'auto';
+      canvasClone.getContext('2d').drawImage(this.capturedPages[i], 0, 0);
+      wrapper.appendChild(canvasClone);
+
+      if (iframeContainer) {
+        container.insertBefore(wrapper, iframeContainer);
+      } else {
+        container.appendChild(wrapper);
+      }
+    }
+  };
+
+  PDFViewerApp.prototype.saveCapturedPDF = function () {
+    if (this.capturedPages.length === 0) { showToast('캡쳐된 페이지가 없습니다.'); return; }
+
+    if (typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined') {
+      showToast('jsPDF 라이브러리를 로드할 수 없습니다.');
+      return;
+    }
+
+    var jsPDF = (window.jspdf || jspdf).jsPDF;
+    var firstCanvas = this.capturedPages[0];
+    var pWidth = firstCanvas.width;
+    var pHeight = firstCanvas.height;
+    var orientation = pWidth > pHeight ? 'l' : 'p';
+
+    var pdf = new jsPDF({
+      orientation: orientation,
+      unit: 'px',
+      format: [pWidth, pHeight]
+    });
+
+    for (var i = 0; i < this.capturedPages.length; i++) {
+      if (i > 0) {
+        var c = this.capturedPages[i];
+        pdf.addPage([c.width, c.height], c.width > c.height ? 'l' : 'p');
+      }
+      var imgData = this.capturedPages[i].toDataURL('image/jpeg', 0.92);
+      pdf.addImage(imgData, 'JPEG', 0, 0, this.capturedPages[i].width, this.capturedPages[i].height);
+    }
+
+    pdf.save('captured-' + new Date().toISOString().slice(0, 10) + '.pdf');
+    showToast('PDF 저장 완료');
+  };
+
   PDFViewerApp.prototype.openUrl = function (url) {
+    var self = this;
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+    // Close PDF or image if open
+    if (this.engine.pdfDoc || this.engine.isImageMode) {
+      this.engine.destroy();
+      this.engine.isImageMode = false;
+      var vc = $('#viewer-container');
+      vc.querySelectorAll('.page-wrapper').forEach(function (pw) { pw.remove(); });
+      // Reset annotations
+      this.annotations.docKey = null;
+      this.annotations.highlights = [];
+      this.annotations.memos = [];
+      this.annotations.boxes = [];
+      this.annotations.underlines = [];
+      this.annotations.clearSelection();
+    }
+
+    // Hide welcome screen
+    var welcome = $('#welcome-screen');
+    if (welcome) welcome.classList.add('hidden');
+
     var container = $('#viewer-container');
     var existing = document.getElementById('url-iframe-container');
     if (existing) existing.remove();
@@ -3696,10 +4178,24 @@
     var closeBtn = document.createElement('button');
     closeBtn.id = 'url-iframe-close';
     closeBtn.textContent = '\u00D7 \uB2EB\uAE30';
-    closeBtn.addEventListener('click', function () { iframeContainer.remove(); });
+    closeBtn.addEventListener('click', function () {
+      if (self.capturedPages.length > 0) {
+        if (confirm('캡쳐된 페이지가 있습니다. PDF로 저장하시겠습니까?')) {
+          self.saveCapturedPDF();
+        }
+      }
+      iframeContainer.remove();
+      self.capturedPages = [];
+      self.sidebar.renderCapturePanel();
+    });
     iframeContainer.appendChild(closeBtn);
 
     this.toolbar.toggleUrlBar(false);
+
+    // Auto-switch to capture tab and open sidebar
+    this.sidebar.switchTab('capture');
+    this.sidebar.toggle(true);
+    this.sidebar.renderCapturePanel();
   };
 
   PDFViewerApp.prototype.onDocumentLoaded = function (detail) {
@@ -3731,8 +4227,10 @@
       self.annotations.memos = self.storage.loadMemos(detail.fingerprint);
       self.annotations.boxes = self.storage.loadBoxes(detail.fingerprint);
       self.annotations.underlines = self.storage.loadUnderlines(detail.fingerprint);
+      self.annotations.emojis = self.storage.loadEmojis(detail.fingerprint);
       self.sidebar.renderMemos();
       self.sidebar.renderDecorations();
+      self.annotations.renderAllEmojis();
 
       if (viewState && viewState.lastPage) {
         setTimeout(function () {
