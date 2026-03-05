@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="css/dark-mode.css">
 </head>
 <body>
-  <input type="file" id="file-input" accept=".pdf,application/pdf">
+  <input type="file" id="file-input" accept=".pdf,application/pdf,image/*">
 
   <div id="app">
     <!-- ===== TOOLBAR ===== -->
@@ -25,11 +25,15 @@
 
       <div class="toolbar-separator"></div>
 
-      <!-- File -->
+      <!-- File + URL -->
       <div class="toolbar-group">
         <button class="toolbar-btn toolbar-btn-text" id="btn-open" title="파일 열기 (Ctrl+O)">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
           <span class="btn-label">파일</span>
+        </button>
+        <button class="toolbar-btn toolbar-btn-text" id="btn-url" title="URL 열기">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+          <span class="btn-label">URL</span>
         </button>
       </div>
 
@@ -189,6 +193,7 @@
       <div class="toolbar-group" style="position:relative;">
         <button class="toolbar-btn" id="btn-underline" title="밑줄">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z"/></svg>
+          <span id="underline-indicator"></span>
           <span class="btn-label">밑줄</span>
         </button>
         <div id="underline-dropdown" class="underline-dropdown hidden">
@@ -215,8 +220,12 @@
 
       <div class="toolbar-spacer"></div>
 
-      <!-- Right side: Search, Print, Dark mode -->
+      <!-- Right side: Save, Search, Print, Dark mode -->
       <div class="toolbar-group">
+        <button class="toolbar-btn" id="btn-save" title="저장 (Ctrl+S)">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm2 16H5V5h11.17L19 7.83V19zm-7-7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zM6 6h9v4H6V6z"/></svg>
+          <span class="btn-label">저장</span>
+        </button>
         <button class="toolbar-btn" id="btn-search" title="검색 (Ctrl+F)">
           <svg viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
           <span class="btn-label">검색</span>
@@ -243,6 +252,17 @@
         <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
       </button>
       <button class="search-btn" id="search-close" title="닫기 (Esc)">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+
+    <!-- ===== URL BAR ===== -->
+    <div id="url-bar" class="hidden">
+      <input type="text" id="url-input" placeholder="URL을 입력하세요... (https://...)">
+      <button class="search-btn" id="url-go" title="이동">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+      <button class="search-btn" id="url-close" title="닫기">
         <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
       </button>
     </div>

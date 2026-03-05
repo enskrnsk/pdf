@@ -187,3 +187,13 @@ body.dark-mode .deco-clear-all-btn {
 body.dark-mode .deco-clear-all-btn:hover {
   background: rgba(244, 67, 54, 0.08);
 }
+
+/* Toast */
+body.dark-mode .toast-notification {
+  background: rgba(0, 160, 223, 0.88);
+}
+
+/* URL bar */
+body.dark-mode #url-bar { background: var(--bg-secondary); border-color: var(--border-color); }
+body.dark-mode #url-input { background: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color); }
+body.dark-mode #url-iframe-close { background: var(--bg-toolbar); color: var(--text-toolbar); }

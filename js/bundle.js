@@ -84,6 +84,31 @@
     return 'rgba(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ', ' + opacity + ')';
   }
 
+  function showToast(message) {
+    var toast = document.createElement('div');
+    toast.className = 'toast-notification';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    requestAnimationFrame(function () {
+      toast.classList.add('toast-show');
+    });
+    setTimeout(function () {
+      toast.classList.add('toast-hide');
+      toast.addEventListener('animationend', function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      });
+    }, 1200);
+  }
+
+  function hashCode(str) {
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
   var BOX_COLORS = {
     yellow: 'rgba(255, 235, 59, 0.4)',
     green: 'rgba(76, 175, 80, 0.4)',
@@ -243,6 +268,8 @@
     this.pageViewports = new Map();
     this.viewerContainer = null;
     this.observer = null;
+    this.isImageMode = false;
+    this.imageData = null;
   }
 
   PDFEngine.prototype.addEventListener = function (type, fn) {
@@ -279,6 +306,60 @@
       });
       return pdfDoc;
     });
+  };
+
+  // Image mode: display image as a single virtual page
+  PDFEngine.prototype.setupImageMode = function (img, fileName, fileSize) {
+    if (this.pdfDoc) this.destroy();
+    this.isImageMode = true;
+    this.imageData = img;
+    this.pdfDoc = null;
+    this.totalPages = 1;
+    this.currentPage = 1;
+
+    var docKey = 'img_' + hashCode(fileName + fileSize);
+    var width = img.naturalWidth * this.currentScale;
+    var height = img.naturalHeight * this.currentScale;
+
+    this.viewerContainer.innerHTML = '';
+    // Remove any existing iframe
+    var existingIframe = document.getElementById('url-iframe-container');
+    if (existingIframe) existingIframe.remove();
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'page-wrapper';
+    wrapper.dataset.page = '1';
+    wrapper.style.width = width + 'px';
+    wrapper.style.height = height + 'px';
+    this.viewerContainer.appendChild(wrapper);
+
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.className = 'page-canvas';
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    wrapper.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.drawImage(img, 0, 0, width, height);
+
+    var annotLayer = document.createElement('div');
+    annotLayer.className = 'custom-annotations';
+    annotLayer.dataset.page = '1';
+    wrapper.appendChild(annotLayer);
+
+    this.renderedPages = this.renderedPages || new Map();
+    this.renderedPages.set(1, 'rendered');
+    this.pageViewports = this.pageViewports || new Map();
+    this.pageViewports.set(1, { width: width, height: height, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight });
+
+    this.emit('documentLoaded', {
+      totalPages: 1,
+      fingerprint: docKey,
+    });
+    this.emit('pageRendered', { pageNum: 1 });
   };
 
   PDFEngine.prototype.setViewerContainer = function (container) {
@@ -735,6 +816,13 @@
       boxColorIndicator: $('#box-color-indicator'),
       underlineBtn: $('#btn-underline'),
       underlineDropdown: $('#underline-dropdown'),
+      underlineIndicator: $('#underline-indicator'),
+      saveBtn: $('#btn-save'),
+      urlBtn: $('#btn-url'),
+      urlBar: $('#url-bar'),
+      urlInput: $('#url-input'),
+      urlGo: $('#url-go'),
+      urlClose: $('#url-close'),
     };
 
     this.bindEvents();
@@ -974,6 +1062,7 @@
           var mode = btn.dataset.mode;
           engine.emit('setDrawTool', { tool: 'underline-' + mode });
           self.toggleUnderlineDropdown(false);
+          self.updateUnderlineIndicator();
         });
       });
 
@@ -985,6 +1074,7 @@
           ulColorSwatches.forEach(function (s) { s.classList.remove('active'); });
           swatch.classList.add('active');
           engine.emit('underlineColorChanged', { color: swatch.dataset.color });
+          self.updateUnderlineIndicator();
         });
       });
 
@@ -996,6 +1086,7 @@
           widthBtns.forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           engine.emit('underlineWidthChanged', { width: parseInt(btn.dataset.width) });
+          self.updateUnderlineIndicator();
         });
       });
 
@@ -1052,6 +1143,43 @@
       document.body.classList.add('dark-mode');
       this.updateDarkModeIcon(true);
     }
+
+    // Save button
+    if (this.elements.saveBtn) {
+      this.elements.saveBtn.addEventListener('click', function () {
+        engine.emit('explicitSave');
+      });
+    }
+
+    // URL opener
+    if (this.elements.urlBtn) {
+      this.elements.urlBtn.addEventListener('click', function () {
+        self.toggleUrlBar();
+      });
+    }
+    if (this.elements.urlGo) {
+      this.elements.urlGo.addEventListener('click', function () {
+        var url = self.elements.urlInput.value.trim();
+        if (url) engine.emit('openUrl', { url: url });
+      });
+    }
+    if (this.elements.urlInput) {
+      this.elements.urlInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          var url = e.target.value.trim();
+          if (url) engine.emit('openUrl', { url: url });
+        }
+        if (e.key === 'Escape') self.toggleUrlBar(false);
+      });
+    }
+    if (this.elements.urlClose) {
+      this.elements.urlClose.addEventListener('click', function () {
+        self.toggleUrlBar(false);
+      });
+    }
+
+    // Initialize underline indicator
+    this.updateUnderlineIndicator();
   };
 
   Toolbar.prototype.updateControls = function (enabled) {
@@ -1172,27 +1300,53 @@
     var borderColor = activeBorder ? activeBorder.dataset.color : 'none';
     var fillColor = activeFill ? activeFill.dataset.color : 'none';
 
-    if (borderColor !== 'none') {
-      var bc = colorWithOpacity(borderColor, 0.9) || BOX_BORDER_COLORS[borderColor];
-      if (bc) {
-        indicator.style.background = 'transparent';
-        indicator.style.borderColor = bc;
-        indicator.style.borderWidth = '3px';
-        return;
-      }
-    }
+    // Show fill as background
     if (fillColor !== 'none') {
-      var fc = colorWithOpacity(fillColor, 0.8) || (BOX_COLORS[fillColor] ? BOX_COLORS[fillColor].replace('0.4', '0.8') : null);
-      if (fc) {
-        indicator.style.background = fc;
-        indicator.style.borderColor = 'rgba(255,255,255,0.8)';
-        indicator.style.borderWidth = '1.5px';
-        return;
-      }
+      indicator.style.background = colorWithOpacity(fillColor, 0.6) || 'transparent';
+    } else {
+      indicator.style.background = 'transparent';
     }
-    indicator.style.background = 'rgba(33, 150, 243, 0.8)';
-    indicator.style.borderColor = 'rgba(255,255,255,0.8)';
-    indicator.style.borderWidth = '1.5px';
+    // Show border as border-color
+    if (borderColor !== 'none') {
+      indicator.style.borderColor = colorWithOpacity(borderColor, 0.9) || 'rgba(255,255,255,0.5)';
+      indicator.style.borderWidth = '2px';
+      indicator.style.borderStyle = 'solid';
+    } else {
+      indicator.style.borderColor = 'rgba(255,255,255,0.3)';
+      indicator.style.borderWidth = '1px';
+      indicator.style.borderStyle = 'dashed';
+    }
+  };
+
+  Toolbar.prototype.toggleUrlBar = function (forceState) {
+    var bar = this.elements.urlBar;
+    if (!bar) return;
+    var show = forceState !== undefined ? forceState : bar.classList.contains('hidden');
+    bar.classList.toggle('hidden', !show);
+    if (show) this.elements.urlInput.focus();
+  };
+
+  Toolbar.prototype.updateUnderlineIndicator = function () {
+    var indicator = this.elements.underlineIndicator;
+    if (!indicator) return;
+    var dd = this.elements.underlineDropdown;
+    if (!dd) return;
+    var activeColor = dd.querySelector('.underline-color-swatch.active');
+    var colorName = activeColor ? activeColor.dataset.color : 'red';
+    var color = UNDERLINE_COLORS[colorName] || UNDERLINE_COLORS.red;
+    var activeWidth = dd.querySelector('.underline-width-btn.active');
+    var width = activeWidth ? parseInt(activeWidth.dataset.width) : 2;
+    var activeMode = dd.querySelector('.underline-mode-btn.active');
+    var mode = activeMode ? activeMode.dataset.mode : 'straight';
+
+    indicator.style.height = Math.max(2, width) + 'px';
+    if (mode === 'freehand') {
+      indicator.style.background = 'transparent';
+      indicator.style.borderBottom = width + 'px dotted ' + color;
+    } else {
+      indicator.style.background = color;
+      indicator.style.borderBottom = 'none';
+    }
   };
 
   Toolbar.prototype.toggleUnderlineDropdown = function (forceState) {
@@ -3249,6 +3403,18 @@
     this.engine.addEventListener('documentLoaded', function (e) {
       self.onDocumentLoaded(e.detail);
     });
+
+    // Save button
+    this.engine.addEventListener('explicitSave', function () {
+      self.annotations.save();
+      self.saveViewState();
+      showToast('\uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.');
+    });
+
+    // URL opener
+    this.engine.addEventListener('openUrl', function (e) {
+      self.openUrl(e.detail.url);
+    });
   };
 
   PDFViewerApp.prototype.setupDragAndDrop = function () {
@@ -3287,6 +3453,8 @@
         var file = files[0];
         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
           self.openFile(file);
+        } else if (file.type.startsWith('image/')) {
+          self.openImage(file);
         }
       }
     });
@@ -3309,7 +3477,11 @@
     this.fileInput.addEventListener('change', function (e) {
       var file = e.target.files[0];
       if (file) {
-        self.openFile(file);
+        if (file.type.startsWith('image/')) {
+          self.openImage(file);
+        } else {
+          self.openFile(file);
+        }
       }
       e.target.value = '';
     });
@@ -3391,6 +3563,10 @@
           case 'o':
             e.preventDefault();
             self.triggerFileOpen();
+            break;
+          case 's':
+            e.preventDefault();
+            self.engine.emit('explicitSave');
             break;
           case '=':
           case '+':
@@ -3477,6 +3653,53 @@
         alert('PDF \uD30C\uC77C\uC744 \uC5F4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4: ' + err.message);
         if (welcome) welcome.classList.remove('hidden');
       });
+  };
+
+  // Open image file
+  PDFViewerApp.prototype.openImage = function (file) {
+    var self = this;
+    var welcome = $('#welcome-screen');
+    if (welcome) welcome.classList.add('hidden');
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        self.engine.setupImageMode(img, file.name, file.size);
+        document.title = file.name + ' - PDF \uBDF0\uC5B4';
+      };
+      img.onerror = function () {
+        showToast('\uC774\uBBF8\uC9C0\uB97C \uC5F4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.');
+        if (welcome) welcome.classList.remove('hidden');
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Open URL in iframe
+  PDFViewerApp.prototype.openUrl = function (url) {
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    var container = $('#viewer-container');
+    var existing = document.getElementById('url-iframe-container');
+    if (existing) existing.remove();
+
+    var iframeContainer = document.createElement('div');
+    iframeContainer.id = 'url-iframe-container';
+    container.appendChild(iframeContainer);
+
+    var iframe = document.createElement('iframe');
+    iframe.src = url;
+    iframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups';
+    iframeContainer.appendChild(iframe);
+
+    var closeBtn = document.createElement('button');
+    closeBtn.id = 'url-iframe-close';
+    closeBtn.textContent = '\u00D7 \uB2EB\uAE30';
+    closeBtn.addEventListener('click', function () { iframeContainer.remove(); });
+    iframeContainer.appendChild(closeBtn);
+
+    this.toolbar.toggleUrlBar(false);
   };
 
   PDFViewerApp.prototype.onDocumentLoaded = function (detail) {

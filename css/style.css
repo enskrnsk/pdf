@@ -614,13 +614,14 @@ html, body {
 
 #memo-color-indicator {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 10px;
-  height: 10px;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.9);
   background: rgba(255, 235, 59, 0.8);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 
 .memo-color-dropdown {
@@ -769,13 +770,14 @@ html, body {
 #btn-box-color { position: relative; }
 #box-color-indicator {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 10px;
+  bottom: 2px;
+  right: 2px;
+  width: 13px;
   height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.8);
-  background: rgba(33, 150, 243, 0.8);
+  border-radius: 2px;
+  border: 2px solid rgba(33, 150, 243, 0.9);
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 .box-eyedropper-btn {
@@ -1190,3 +1192,105 @@ html, body {
   background: rgba(244, 67, 54, 0.1);
   color: #f44336;
 }
+
+/* ============ UNDERLINE INDICATOR ============ */
+#btn-underline { position: relative; }
+#underline-indicator {
+  position: absolute;
+  bottom: 3px;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(244, 67, 54, 0.9);
+  pointer-events: none;
+}
+
+/* ============ TOAST NOTIFICATION ============ */
+.toast-notification {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px 28px;
+  background: rgba(0, 42, 73, 0.92);
+  color: #ffffff;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  letter-spacing: 0.3px;
+}
+.toast-notification.toast-show {
+  opacity: 1;
+}
+.toast-notification.toast-hide {
+  animation: toastFadeUp 0.6s ease forwards;
+}
+@keyframes toastFadeUp {
+  from { opacity: 1; transform: translate(-50%, -50%); }
+  to   { opacity: 0; transform: translate(-50%, calc(-50% - 40px)); }
+}
+
+/* ============ URL BAR ============ */
+#url-bar {
+  position: fixed;
+  top: var(--toolbar-height);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 99;
+  transition: opacity var(--transition), transform var(--transition);
+}
+#url-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-10px);
+}
+#url-input {
+  width: 400px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+#url-input:focus { border-color: var(--accent); }
+
+/* ============ URL IFRAME ============ */
+#url-iframe-container {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 5;
+  background: var(--bg-primary);
+}
+#url-iframe-container iframe {
+  width: 100%; height: 100%; border: none;
+}
+#url-iframe-close {
+  position: absolute;
+  top: 8px; right: 8px;
+  z-index: 6;
+  padding: 6px 14px;
+  background: var(--bg-toolbar);
+  color: var(--text-toolbar);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+#url-iframe-close:hover { opacity: 0.85; }
