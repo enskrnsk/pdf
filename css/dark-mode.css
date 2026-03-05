@@ -1,0 +1,189 @@
+/* ============ DARK MODE (NEXON Brand) ============ */
+body.dark-mode {
+  --bg-primary: #001520;
+  --bg-secondary: #001d30;
+  --bg-toolbar: #001018;
+  --bg-sidebar: #001a2c;
+  --text-primary: #e4e8ec;
+  --text-secondary: #8c8f90;
+  --text-toolbar: #e4e8ec;
+  --border-color: #0a3454;
+  --accent: #00A0DF;
+  --accent-hover: #33b3e6;
+  --page-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+body.dark-mode .page-canvas {
+  filter: brightness(0.88) contrast(1.05);
+}
+
+body.dark-mode .page-wrapper {
+  background: #0d1f2d;
+}
+
+body.dark-mode #search-input {
+  background: #001520;
+  color: #e4e8ec;
+  border-color: #0a3454;
+}
+
+body.dark-mode .search-btn:hover {
+  background: #001a2c;
+}
+
+body.dark-mode .thumbnail-canvas-wrap {
+  background: #0d1f2d;
+}
+
+body.dark-mode .outline-link:hover {
+  background: rgba(0, 160, 223, 0.08);
+}
+
+body.dark-mode .thumbnail-item:hover {
+  background: rgba(0, 160, 223, 0.08);
+}
+
+body.dark-mode .thumbnail-item.active {
+  background: rgba(0, 160, 223, 0.12);
+  outline-color: var(--nexon-blue);
+}
+
+body.dark-mode .bookmark-add-btn {
+  border-color: #0a3454;
+  color: #00A0DF;
+}
+
+body.dark-mode .bookmark-add-btn:hover {
+  background: rgba(0, 160, 223, 0.08);
+}
+
+body.dark-mode .bookmark-item:hover {
+  background: rgba(0, 160, 223, 0.05);
+}
+
+body.dark-mode .memo-popover {
+  background: #1a2e1a;
+  border-color: #2d4a10;
+  color: #e4e8ec;
+}
+
+body.dark-mode .memo-textarea {
+  color: #e4e8ec;
+}
+
+body.dark-mode .highlight-toolbar {
+  background: #001520;
+}
+
+body.dark-mode #viewer-container::-webkit-scrollbar-thumb,
+body.dark-mode .sidebar-panel::-webkit-scrollbar-thumb {
+  background: rgba(0, 160, 223, 0.2);
+}
+
+body.dark-mode #viewer-container::-webkit-scrollbar-thumb:hover,
+body.dark-mode .sidebar-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 160, 223, 0.35);
+}
+
+body.dark-mode .sidebar-tab-btn:hover {
+  background: rgba(0, 160, 223, 0.08);
+}
+
+body.dark-mode .sidebar-tab-btn.active {
+  color: #00A0DF;
+  border-bottom-color: #00A0DF;
+}
+
+body.dark-mode #page-input {
+  background: rgba(0, 160, 223, 0.08);
+  border-color: rgba(0, 160, 223, 0.2);
+}
+
+body.dark-mode .toolbar-btn:hover:not(:disabled) {
+  background: rgba(0, 160, 223, 0.2);
+}
+
+/* Dark mode: memo list */
+body.dark-mode .memo-list-item:hover {
+  background: rgba(0, 160, 223, 0.05);
+}
+
+/* Dark mode: box color dropdown */
+body.dark-mode .box-color-dropdown {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+body.dark-mode .box-color-swatch.none-swatch {
+  background: var(--bg-primary);
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+body.dark-mode .box-eyedropper-btn {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+body.dark-mode .box-eyedropper-btn:hover {
+  background: rgba(0, 160, 223, 0.08);
+}
+
+/* Dark mode: underline dropdown */
+body.dark-mode .underline-dropdown {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+body.dark-mode .underline-mode-btn {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+body.dark-mode .underline-mode-btn.active {
+  background: rgba(0, 160, 223, 0.15);
+  border-color: var(--nexon-blue);
+  color: var(--nexon-blue);
+}
+body.dark-mode .underline-width-btn {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+body.dark-mode .underline-width-btn.active {
+  background: rgba(0, 160, 223, 0.15);
+  border-color: var(--nexon-blue);
+  color: var(--nexon-blue);
+}
+
+/* Dark mode: area memo popover */
+body.dark-mode .area-memo-popover {
+  background: #1a2e1a;
+  border-color: #2d4a10;
+}
+body.dark-mode .area-memo-popover textarea {
+  color: #e4e8ec;
+}
+
+/* Dark mode: eyedropper target select */
+body.dark-mode .box-eyedropper-target {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+/* Dark mode: opacity slider */
+body.dark-mode .box-opacity-slider {
+  background: var(--border-color);
+}
+
+/* Dark mode: decoration panel */
+body.dark-mode .deco-list-item:hover {
+  background: rgba(0, 160, 223, 0.05);
+}
+body.dark-mode .deco-list-item.selected {
+  background: rgba(0, 160, 223, 0.12);
+}
+body.dark-mode .deco-clear-all-btn {
+  border-color: rgba(244, 67, 54, 0.5);
+}
+body.dark-mode .deco-clear-all-btn:hover {
+  background: rgba(244, 67, 54, 0.08);
+}
