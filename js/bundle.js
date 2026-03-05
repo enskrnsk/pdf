@@ -1452,8 +1452,9 @@
       self.renderDecorations();
     });
 
-    // Render emoji panel
+    // Render emoji and capture panels
     this.renderEmojiPanel();
+    this.renderCapturePanel();
 
     // Setup sidebar resize handle
     this.setupResizeHandle();
