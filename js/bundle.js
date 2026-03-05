@@ -1151,11 +1151,35 @@
       this.updateDarkModeIcon(true);
     }
 
-    // Save button
+    // Save button — toggle dropdown
     if (this.elements.saveBtn) {
-      this.elements.saveBtn.addEventListener('click', function () {
-        engine.emit('explicitSave');
+      var saveDropdown = $('#save-dropdown');
+      this.elements.saveBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (saveDropdown) {
+          saveDropdown.classList.toggle('hidden');
+        } else {
+          engine.emit('explicitSave');
+        }
       });
+      if (saveDropdown) {
+        saveDropdown.querySelectorAll('.save-dropdown-item').forEach(function (item) {
+          item.addEventListener('click', function (e) {
+            e.stopPropagation();
+            saveDropdown.classList.add('hidden');
+            var action = item.dataset.action;
+            if (action === 'save') {
+              engine.emit('doSave');
+            } else if (action === 'save-as') {
+              engine.emit('doSaveAs');
+            }
+          });
+        });
+        // Close on outside click
+        document.addEventListener('click', function () {
+          saveDropdown.classList.add('hidden');
+        });
+      }
     }
 
     // Delete selected button
@@ -2370,6 +2394,7 @@
     // Listen for color changes from toolbar
     this.engine.addEventListener('memoColorChanged', function (e) {
       self.selectedMemoColor = e.detail.color;
+      showToast('\uB9C8\uC6B0\uC2A4 \uC624\uB978\uCABD \uBC84\uD2BC\uC73C\uB85C \uBA54\uBAA8\uD560 \uC601\uC5ED\uC744 \uC9C0\uC815\uD558\uC138\uC694');
     });
 
     // Listen for draw tool changes
@@ -2454,6 +2479,13 @@
     } else {
       vc.style.cursor = '';
     }
+    // Guide toast
+    var guideMessages = {
+      'box': '\uB9C8\uC6B0\uC2A4 \uC67C\uCABD \uBC84\uD2BC\uC73C\uB85C \uB4DC\uB798\uADF8\uD558\uC5EC \uC0C1\uC790\uB97C \uADF8\uB9AC\uC138\uC694',
+      'underline-straight': '\uB9C8\uC6B0\uC2A4 \uC67C\uCABD \uBC84\uD2BC\uC73C\uB85C \uB4DC\uB798\uADF8\uD558\uC5EC \uBC11\uC904\uC744 \uADF8\uB9AC\uC138\uC694',
+      'underline-freehand': '\uB9C8\uC6B0\uC2A4 \uC67C\uCABD \uBC84\uD2BC\uC73C\uB85C \uC790\uC720\uB86D\uAC8C \uBC11\uC904\uC744 \uADF8\uB9AC\uC138\uC694'
+    };
+    if (guideMessages[tool]) showToast(guideMessages[tool]);
   };
 
   // ---- Selection methods ----
@@ -3639,6 +3671,9 @@
     this.underlines.filter(function (u) { return u.pageNum === pageNum; }).forEach(function (u) {
       self.renderUnderline(u);
     });
+    this.emojis.filter(function (em) { return em.pageNum === pageNum; }).forEach(function (em) {
+      self.renderEmojiOnPage(em, wrapper);
+    });
   };
 
   AnnotationManager.prototype.save = function () {
@@ -3682,7 +3717,25 @@
       self.onDocumentLoaded(e.detail);
     });
 
-    // Save button
+    // Save (localStorage)
+    this.engine.addEventListener('doSave', function () {
+      self.annotations.save();
+      self.saveViewState();
+      showToast('\uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.');
+    });
+
+    // Save As (export PDF file)
+    this.engine.addEventListener('doSaveAs', function () {
+      if (self.capturedPages && self.capturedPages.length > 0) {
+        self.saveCapturedPDF();
+      } else if (self.engine.pdfDoc) {
+        self.saveAsAnnotatedPDF();
+      } else {
+        showToast('\uC800\uC7A5\uD560 \uBB38\uC11C\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.');
+      }
+    });
+
+    // Legacy: Ctrl+S still uses explicitSave
     this.engine.addEventListener('explicitSave', function () {
       if (self.capturedPages && self.capturedPages.length > 0) {
         self.saveCapturedPDF();
@@ -3928,6 +3981,7 @@
     var reader = new FileReader();
     reader.onload = function () {
       self.engine.loadDocument(reader.result).then(function () {
+        self.engine.pdfFilename = file.name;
         document.title = file.name + ' - PDF 뷰어';
       }).catch(function (err) {
         console.error('Error opening PDF:', err);
@@ -3988,16 +4042,81 @@
   // Open URL in iframe
   PDFViewerApp.prototype.captureWebpage = function () {
     var iframe = document.querySelector('#url-iframe-container iframe');
-    if (!iframe) { showToast('캡쳐할 웹페이지가 없습니다.'); return; }
+    if (!iframe) { showToast('\uCEA1\uCCD0\uD560 \uC6F9\uD398\uC774\uC9C0\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.'); return; }
 
+    var self = this;
+
+    // Use Screen Capture API for reliable cross-origin capture
+    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      showToast('\uD654\uBA74 \uACF5\uC720 \uCC3D\uC5D0\uC11C \uD604\uC7AC \uD0ED\uC744 \uC120\uD0DD\uD558\uC138\uC694');
+      navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser' },
+        preferCurrentTab: true
+      }).then(function (stream) {
+        var video = document.createElement('video');
+        video.srcObject = stream;
+        video.onloadedmetadata = function () {
+          video.play().then(function () {
+            // Wait a frame for rendering
+            requestAnimationFrame(function () {
+              var vw = video.videoWidth;
+              var vh = video.videoHeight;
+
+              // Capture full frame
+              var fullCanvas = document.createElement('canvas');
+              fullCanvas.width = vw;
+              fullCanvas.height = vh;
+              fullCanvas.getContext('2d').drawImage(video, 0, 0, vw, vh);
+
+              // Stop stream
+              stream.getTracks().forEach(function (t) { t.stop(); });
+
+              // Crop to iframe area
+              var iframeRect = iframe.getBoundingClientRect();
+              var scaleX = vw / window.innerWidth;
+              var scaleY = vh / window.innerHeight;
+
+              var cx = Math.round(iframeRect.left * scaleX);
+              var cy = Math.round(iframeRect.top * scaleY);
+              var cw = Math.round(iframeRect.width * scaleX);
+              var ch = Math.round(iframeRect.height * scaleY);
+
+              // Clamp to bounds
+              cx = Math.max(0, cx);
+              cy = Math.max(0, cy);
+              cw = Math.min(cw, vw - cx);
+              ch = Math.min(ch, vh - cy);
+
+              var croppedCanvas = document.createElement('canvas');
+              croppedCanvas.width = cw;
+              croppedCanvas.height = ch;
+              croppedCanvas.getContext('2d').drawImage(fullCanvas, cx, cy, cw, ch, 0, 0, cw, ch);
+
+              self.addCapturedPage(croppedCanvas);
+            });
+          });
+        };
+      }).catch(function (err) {
+        if (err.name === 'NotAllowedError') {
+          showToast('\uD654\uBA74 \uACF5\uC720\uAC00 \uCDE8\uC18C\uB418\uC5C8\uC2B5\uB2C8\uB2E4');
+        } else {
+          // Fallback to foreignObject/placeholder
+          self.captureWebpageFallback(iframe);
+        }
+      });
+    } else {
+      // No getDisplayMedia support — use fallback
+      this.captureWebpageFallback(iframe);
+    }
+  };
+
+  // Fallback: foreignObject SVG or placeholder
+  PDFViewerApp.prototype.captureWebpageFallback = function (iframe) {
     var self = this;
     try {
       var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-      // Same-origin: use html2canvas-like approach via foreignObject SVG
-      var body = iframeDoc.body;
       var w = iframe.clientWidth;
       var h = iframe.clientHeight;
-      var scrollY = iframeDoc.documentElement.scrollTop || body.scrollTop;
 
       var canvas = document.createElement('canvas');
       canvas.width = w * 2;
@@ -4005,7 +4124,6 @@
       var ctx = canvas.getContext('2d');
       ctx.scale(2, 2);
 
-      // Serialize visible portion to SVG foreignObject
       var serializer = new XMLSerializer();
       var clone = iframeDoc.documentElement.cloneNode(true);
       var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
@@ -4019,13 +4137,11 @@
         self.addCapturedPage(canvas);
       };
       img.onerror = function () {
-        // Fallback to placeholder
         self.createPlaceholderCapture(iframe.src, w, h);
       };
       var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
       img.src = URL.createObjectURL(blob);
     } catch (e) {
-      // Cross-origin: create placeholder
       this.createPlaceholderCapture(iframe.src, iframe.clientWidth, iframe.clientHeight);
     }
   };
@@ -4136,8 +4252,97 @@
       pdf.addImage(imgData, 'JPEG', 0, 0, this.capturedPages[i].width, this.capturedPages[i].height);
     }
 
-    pdf.save('captured-' + new Date().toISOString().slice(0, 10) + '.pdf');
-    showToast('PDF 저장 완료');
+    var filename = prompt('\uD30C\uC77C \uC774\uB984', 'captured-' + new Date().toISOString().slice(0, 10) + '.pdf');
+    if (!filename) return;
+    if (!filename.endsWith('.pdf')) filename += '.pdf';
+    pdf.save(filename);
+    showToast('PDF \uC800\uC7A5 \uC644\uB8CC');
+  };
+
+  PDFViewerApp.prototype.saveAsAnnotatedPDF = function () {
+    var self = this;
+    var pdfDoc = this.engine.pdfDoc;
+    if (!pdfDoc) return;
+
+    var totalPages = pdfDoc.numPages;
+    var defaultName = (this.engine.pdfFilename || 'document').replace(/\.pdf$/i, '') + '_annotated.pdf';
+    var filename = prompt('\uD30C\uC77C \uC774\uB984', defaultName);
+    if (!filename) return;
+    if (!filename.endsWith('.pdf')) filename += '.pdf';
+
+    showToast('\uD398\uC774\uC9C0 \uB80C\uB354\uB9C1 \uC911...');
+
+    var jsPDF = (window.jspdf || jspdf).jsPDF;
+    var promises = [];
+
+    for (var i = 1; i <= totalPages; i++) {
+      promises.push(this.renderPageForExport(i));
+    }
+
+    Promise.all(promises).then(function (canvases) {
+      var first = canvases[0];
+      var pdf = new jsPDF({
+        orientation: first.width > first.height ? 'l' : 'p',
+        unit: 'px',
+        format: [first.width, first.height]
+      });
+
+      canvases.forEach(function (canvas, idx) {
+        if (idx > 0) {
+          pdf.addPage([canvas.width, canvas.height], canvas.width > canvas.height ? 'l' : 'p');
+        }
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, canvas.width, canvas.height);
+      });
+
+      pdf.save(filename);
+      showToast('PDF \uC800\uC7A5 \uC644\uB8CC');
+    });
+  };
+
+  PDFViewerApp.prototype.renderPageForExport = function (pageNum) {
+    var self = this;
+    return this.engine.pdfDoc.getPage(pageNum).then(function (page) {
+      var scale = 2;
+      var viewport = page.getViewport({ scale: scale });
+      var canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      var ctx = canvas.getContext('2d');
+
+      return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+        // Draw annotations from DOM (get page wrapper)
+        var pw = document.querySelector('.page-wrapper[data-page="' + pageNum + '"]');
+        if (!pw) return canvas;
+
+        var annotLayer = pw.querySelector('.custom-annotations');
+        if (!annotLayer || annotLayer.children.length === 0) return canvas;
+
+        // Use foreignObject SVG to composite annotations
+        var wrapperRect = pw.getBoundingClientRect();
+        var annotClone = annotLayer.cloneNode(true);
+        // Scale annotations to match export canvas size
+        var scaleRatio = viewport.width / wrapperRect.width;
+
+        var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="' + viewport.width + '" height="' + viewport.height + '">' +
+          '<foreignObject width="' + viewport.width + '" height="' + viewport.height + '" style="transform:scale(' + scaleRatio + ');transform-origin:0 0;">' +
+          '<div xmlns="http://www.w3.org/1999/xhtml" style="position:relative;width:' + wrapperRect.width + 'px;height:' + wrapperRect.height + 'px;">' +
+          new XMLSerializer().serializeToString(annotClone) +
+          '</div></foreignObject></svg>';
+
+        return new Promise(function (resolve) {
+          var img = new Image();
+          img.onload = function () {
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas);
+          };
+          img.onerror = function () {
+            resolve(canvas); // Return without annotations on error
+          };
+          var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+          img.src = URL.createObjectURL(blob);
+        });
+      });
+    });
   };
 
   PDFViewerApp.prototype.openUrl = function (url) {

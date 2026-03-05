@@ -210,5 +210,13 @@ body.dark-mode #btn-delete-selected { color: #ef5350; }
 /* Capture panel */
 body.dark-mode .capture-thumbnail-item:hover { background: rgba(0, 160, 223, 0.05); }
 
+/* Save dropdown */
+body.dark-mode .save-dropdown {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+body.dark-mode .save-dropdown-item { color: var(--text-primary); }
+body.dark-mode .save-dropdown-item:hover { background: rgba(0, 160, 223, 0.12); }
+
 /* Emoji grid */
 body.dark-mode .emoji-grid-btn:hover { background: rgba(0, 160, 223, 0.12); }
