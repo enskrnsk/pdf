@@ -188,6 +188,14 @@ body.dark-mode .deco-clear-all-btn:hover {
   background: rgba(244, 67, 54, 0.08);
 }
 
+/* Tab bar */
+body.dark-mode #tab-bar { background: #001018; border-bottom-color: #0a3454; }
+body.dark-mode .tab-item { color: #8c8f90; border-right-color: #0a3454; }
+body.dark-mode .tab-item:hover { background: rgba(0, 160, 223, 0.06); }
+body.dark-mode .tab-item.active { background: #001520; color: #e4e8ec; border-bottom-color: #00A0DF; }
+body.dark-mode .tab-add-btn { color: #8c8f90; }
+body.dark-mode .tab-add-btn:hover { background: rgba(0, 160, 223, 0.1); color: #e4e8ec; }
+
 /* Toast */
 body.dark-mode .toast-notification {
   background: rgba(0, 160, 223, 0.88);

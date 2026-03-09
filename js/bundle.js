@@ -298,8 +298,9 @@
 
   PDFEngine.prototype.loadDocument = function (arrayBuffer) {
     var self = this;
+    // Clear current view but don't destroy pdfDoc (tabs may hold reference)
     if (this.pdfDoc) {
-      this.destroy();
+      this.clearView();
     }
     var loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     return loadingTask.promise.then(function (pdfDoc) {
@@ -375,7 +376,10 @@
   PDFEngine.prototype.setupPages = function () {
     var self = this;
     if (!this.viewerContainer) return Promise.resolve();
+    // Remove page content but preserve welcome screen
+    var welcome = this.viewerContainer.querySelector('#welcome-screen');
     this.viewerContainer.innerHTML = '';
+    if (welcome) this.viewerContainer.appendChild(welcome);
     this.renderedPages.clear();
     this.pageViewports.clear();
 
@@ -763,6 +767,21 @@
     this.setScale(Math.round(newScale * 100) / 100);
   };
 
+  PDFEngine.prototype.clearView = function () {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    this.renderTasks.forEach(function (task) { task.cancel(); });
+    this.renderTasks.clear();
+    this.renderedPages.clear();
+    this.pageViewports.clear();
+    // Remove page wrappers from DOM
+    if (this.viewerContainer) {
+      this.viewerContainer.querySelectorAll('.page-wrapper').forEach(function (pw) { pw.remove(); });
+    }
+  };
+
   PDFEngine.prototype.destroy = function () {
     if (this.observer) {
       this.observer.disconnect();
@@ -935,6 +954,14 @@
       showToast(isDark ? '\uB2E4\uD06C\uBAA8\uB4DC \uCF1C\uAE30' : '\uB2E4\uD06C\uBAA8\uB4DC \uB044\uAE30');
     });
 
+    // Memo tool select button
+    var memoToolBtn = $('#btn-tool-memo');
+    if (memoToolBtn) {
+      memoToolBtn.addEventListener('click', function () {
+        engine.emit('setDrawTool', { tool: 'memo' });
+      });
+    }
+
     // Memo color palette
     if (this.elements.memoColorBtn) {
       this.elements.memoColorBtn.addEventListener('click', function (e) {
@@ -985,15 +1012,10 @@
       }
     }
 
-    // Box draw toggle
+    // Box draw tool select
     if (this.elements.boxDrawBtn) {
       this.elements.boxDrawBtn.addEventListener('click', function () {
-        var current = engine._activeDrawTool || 'none';
-        if (current === 'box') {
-          engine.emit('setDrawTool', { tool: 'none' });
-        } else {
-          engine.emit('setDrawTool', { tool: 'box' });
-        }
+        engine.emit('setDrawTool', { tool: 'box' });
       });
     }
 
@@ -1087,10 +1109,17 @@
       this.updateBoxColorIndicator();
     }
 
-    // Underline dropdown
+    // Underline tool select + dropdown
     if (this.elements.underlineBtn) {
       this.elements.underlineBtn.addEventListener('click', function (e) {
         e.stopPropagation();
+        // Set underline as active tool (use last selected mode)
+        var currentTool = engine._activeDrawTool || 'memo';
+        if (currentTool.indexOf('underline') !== 0) {
+          // Switch to underline tool with last mode
+          var lastMode = self._lastUnderlineMode || 'straight';
+          engine.emit('setDrawTool', { tool: 'underline-' + lastMode });
+        }
         var saveDD = $('#save-dropdown');
         if (saveDD) saveDD.classList.add('hidden');
         self.toggleMemoColorDropdown(false);
@@ -1107,6 +1136,7 @@
           modeBtns.forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           var mode = btn.dataset.mode;
+          self._lastUnderlineMode = mode;
           engine.emit('setDrawTool', { tool: 'underline-' + mode });
           // Keep dropdown open — user clicks [확인] to close
           self.updateUnderlineIndicator();
@@ -1157,6 +1187,9 @@
     // Listen for draw tool changes to update button states
     engine.addEventListener('drawToolChanged', function (e) {
       var tool = e.detail.tool;
+      // Update 3 mutually exclusive tool buttons
+      var memoBtn = $('#btn-tool-memo');
+      if (memoBtn) memoBtn.classList.toggle('active-toggle', tool === 'memo');
       if (self.elements.boxDrawBtn) {
         self.elements.boxDrawBtn.classList.toggle('active-toggle', tool === 'box');
       }
@@ -1165,13 +1198,13 @@
       }
       // Update tool status indicator
       if (self.elements.toolStatus) {
-        var statusText = '\uC6B0\uD074\uB9AD: \uBA54\uBAA8';
-        if (tool === 'box') {
-          statusText = '\uC6B0\uD074\uB9AD: \uBA54\uBAA8 | \uC88C\uD074\uB9AD: \uC0C1\uC790';
-        } else if (tool.indexOf('underline') === 0) {
-          statusText = '\uC6B0\uD074\uB9AD: \uBA54\uBAA8 | \uC88C\uD074\uB9AD: \uBC11\uC904';
-        }
-        self.elements.toolStatus.textContent = statusText;
+        var statusMap = {
+          'memo': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8: \uBA54\uBAA8',
+          'box': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8: \uC0C1\uC790',
+          'underline-straight': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8: \uBC11\uC904(\uC9C1\uC120)',
+          'underline-freehand': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8: \uBC11\uC904(\uC790\uC720\uC120)'
+        };
+        self.elements.toolStatus.textContent = statusMap[tool] || '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8: \uBA54\uBAA8';
       }
     });
 
@@ -2460,17 +2493,14 @@
     this.docKey = null;
     // Area memo drawing state
     this.selectedMemoColor = 'yellow';
-    this.isDrawingArea = false;
+    // Drawing tool state (all tools use right-click drag)
+    this.activeDrawTool = 'memo'; // 'memo' | 'box' | 'underline-straight' | 'underline-freehand'
+    // Unified drawing state (right-click drag for all tools)
+    this.isDrawing = false;
+    this.drawingType = null; // 'memo' | 'box' | 'underline'
     this.drawStartPos = null;
     this.drawOverlayEl = null;
     this.drawPageWrapper = null;
-    // Drawing tool state
-    this.activeDrawTool = 'none'; // 'none' | 'box' | 'underline-straight' | 'underline-freehand'
-    // Left-click drag state (for box/underline)
-    this.isLeftDrawing = false;
-    this.leftDrawStartPos = null;
-    this.leftDrawOverlayEl = null;
-    this.leftDrawPageWrapper = null;
     // Box settings
     this.boxFillColor = 'none';
     this.boxBorderColor = 'blue';
@@ -2497,39 +2527,31 @@
     var self = this;
     if (!this.engine.viewerContainer) return;
 
-    // Text highlight on selection (only when no draw tool active)
+    // Text highlight on selection (left-click)
     this.engine.viewerContainer.addEventListener('mouseup', function (e) {
-      if (e.button === 0 && self.activeDrawTool === 'none') self.handleSelectionEnd(e);
+      if (e.button === 0) self.handleSelectionEnd(e);
     });
 
-    // Prevent context menu on page (we use right-click for area memo)
+    // Prevent context menu on page (we use right-click for all tools)
     this.engine.viewerContainer.addEventListener('contextmenu', function (e) {
       var pw = e.target.closest('.page-wrapper');
       if (pw) e.preventDefault();
     });
 
-    // Right-click drag for area memos
+    // Right-click drag for all tools (memo, box, underline)
     this.engine.viewerContainer.addEventListener('mousedown', function (e) {
       if (e.button === 2) self.handleRightMouseDown(e);
     });
     document.addEventListener('mousemove', function (e) {
-      if (self.isDrawingArea) self.handleMouseMove(e);
-      if (self.isLeftDrawing) self.handleLeftMouseMove(e);
+      if (self.isDrawing) self.handleDrawMove(e);
     });
     document.addEventListener('mouseup', function (e) {
-      if (e.button === 2 && self.isDrawingArea) self.handleRightMouseUp(e);
-      if (e.button === 0 && self.isLeftDrawing) self.handleLeftMouseUp(e);
-    });
-
-    // Left-click drag for box/underline tools
-    this.engine.viewerContainer.addEventListener('mousedown', function (e) {
-      if (e.button === 0 && self.activeDrawTool !== 'none') self.handleLeftMouseDown(e);
+      if (e.button === 2 && self.isDrawing) self.handleDrawEnd(e);
     });
 
     // Listen for color changes from toolbar
     this.engine.addEventListener('memoColorChanged', function (e) {
       self.selectedMemoColor = e.detail.color;
-      showToast('\uB9C8\uC6B0\uC2A4 \uC624\uB978\uCABD \uBC84\uD2BC\uC73C\uB85C \uBA54\uBAA8\uD560 \uC601\uC5ED\uC744 \uC9C0\uC815\uD558\uC138\uC694');
     });
 
     // Listen for draw tool changes
@@ -2557,9 +2579,9 @@
       if (e.detail.type === 'border') self.boxBorderOpacity = e.detail.opacity;
     });
 
-    // Selection: left-click when tool is 'none' → click select or drag select
+    // Selection: left-click → click select or drag select
     this.engine.viewerContainer.addEventListener('mousedown', function (e) {
-      if (e.button !== 0 || self.activeDrawTool !== 'none') return;
+      if (e.button !== 0) return;
       // Check if clicking on an annotation
       var annotEl = e.target.closest('.box-annotation, .area-memo-group, .highlight-group');
       var svgEl = e.target.closest('line[data-underline-id], path[data-underline-id]');
@@ -2607,26 +2629,12 @@
     this.activeDrawTool = tool;
     this.engine._activeDrawTool = tool;
     this.engine.emit('drawToolChanged', { tool: tool });
-    // Update cursor
-    var vc = this.engine.viewerContainer;
-    if (tool !== 'none') {
-      vc.style.cursor = 'crosshair';
-      // Disable textLayer to allow drawing through it
-      vc.querySelectorAll('.textLayer').forEach(function (tl) {
-        tl.style.pointerEvents = 'none';
-      });
-    } else {
-      vc.style.cursor = '';
-      // Restore textLayer
-      vc.querySelectorAll('.textLayer').forEach(function (tl) {
-        tl.style.pointerEvents = '';
-      });
-    }
     // Guide toast
     var guideMessages = {
-      'box': '\uB9C8\uC6B0\uC2A4 \uC67C\uCABD \uBC84\uD2BC\uC73C\uB85C \uB4DC\uB798\uADF8\uD558\uC5EC \uC0C1\uC790\uB97C \uADF8\uB9AC\uC138\uC694',
-      'underline-straight': '\uB9C8\uC6B0\uC2A4 \uC67C\uCABD \uBC84\uD2BC\uC73C\uB85C \uB4DC\uB798\uADF8\uD558\uC5EC \uBC11\uC904\uC744 \uADF8\uB9AC\uC138\uC694',
-      'underline-freehand': '\uB9C8\uC6B0\uC2A4 \uC67C\uCABD \uBC84\uD2BC\uC73C\uB85C \uC790\uC720\uB86D\uAC8C \uBC11\uC904\uC744 \uADF8\uB9AC\uC138\uC694'
+      'memo': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8\uB85C \uBA54\uBAA8 \uC601\uC5ED\uC744 \uC9C0\uC815\uD558\uC138\uC694',
+      'box': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8\uB85C \uC0C1\uC790\uB97C \uADF8\uB9AC\uC138\uC694',
+      'underline-straight': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8\uB85C \uBC11\uC904\uC744 \uADF8\uB9AC\uC138\uC694',
+      'underline-freehand': '\uC6B0\uD074\uB9AD \uB4DC\uB798\uADF8\uB85C \uC790\uC720\uC120\uC744 \uADF8\uB9AC\uC138\uC694'
     };
     if (guideMessages[tool]) showToast(guideMessages[tool]);
   };
@@ -3131,19 +3139,21 @@
     if (el) el.remove();
   };
 
-  // ---- Right-click + drag: Area Memo ----
+  // ---- Right-click + drag: Unified drawing (memo / box / underline) ----
 
   AnnotationManager.prototype.handleRightMouseDown = function (e) {
     var target = e.target;
     // Don't start drawing on existing annotations
-    if (target.closest('.highlight-group') || target.closest('.area-memo-group') || target.closest('.memo-container')) return;
+    if (target.closest('.highlight-group') || target.closest('.area-memo-group') ||
+        target.closest('.memo-container') || target.closest('.box-annotation') ||
+        target.closest('.underline-svg-container')) return;
 
     var pageWrapper = target.closest('.page-wrapper');
     if (!pageWrapper) return;
 
     e.preventDefault();
     var wrapperRect = pageWrapper.getBoundingClientRect();
-    this.isDrawingArea = true;
+    this.isDrawing = true;
     this.drawPageWrapper = pageWrapper;
     this.drawStartPos = {
       x: e.clientX - wrapperRect.left,
@@ -3151,85 +3161,200 @@
       pageNum: parseInt(pageWrapper.dataset.page),
     };
 
-    // Create temporary drawing overlay
     var annotLayer = pageWrapper.querySelector('.custom-annotations');
     if (!annotLayer) return;
-    this.drawOverlayEl = createElement('div', 'area-memo-drawing', annotLayer);
-    this.drawOverlayEl.style.left = this.drawStartPos.x + 'px';
-    this.drawOverlayEl.style.top = this.drawStartPos.y + 'px';
-    this.drawOverlayEl.style.width = '0px';
-    this.drawOverlayEl.style.height = '0px';
 
-    // Set color preview
-    var color = HIGHLIGHT_COLORS[this.selectedMemoColor] || HIGHLIGHT_COLORS.yellow;
-    if (isOutlineColor(this.selectedMemoColor)) {
-      this.drawOverlayEl.style.background = 'transparent';
-      this.drawOverlayEl.style.border = '3px solid ' + color;
-    } else {
-      this.drawOverlayEl.style.background = color;
-      this.drawOverlayEl.style.borderColor = color.replace('0.4', '0.8');
+    var tool = this.activeDrawTool;
+    this.drawingType = tool;
+
+    if (tool === 'memo') {
+      // Memo preview
+      this.drawOverlayEl = createElement('div', 'area-memo-drawing', annotLayer);
+      this.drawOverlayEl.style.left = this.drawStartPos.x + 'px';
+      this.drawOverlayEl.style.top = this.drawStartPos.y + 'px';
+      this.drawOverlayEl.style.width = '0px';
+      this.drawOverlayEl.style.height = '0px';
+      var color = HIGHLIGHT_COLORS[this.selectedMemoColor] || HIGHLIGHT_COLORS.yellow;
+      if (isOutlineColor(this.selectedMemoColor)) {
+        this.drawOverlayEl.style.background = 'transparent';
+        this.drawOverlayEl.style.border = '3px solid ' + color;
+      } else {
+        this.drawOverlayEl.style.background = color;
+        this.drawOverlayEl.style.borderColor = color.replace('0.4', '0.8');
+      }
+    } else if (tool === 'box') {
+      // Box preview
+      this.drawOverlayEl = createElement('div', 'box-drawing-preview', annotLayer);
+      this.drawOverlayEl.style.left = this.drawStartPos.x + 'px';
+      this.drawOverlayEl.style.top = this.drawStartPos.y + 'px';
+      this.drawOverlayEl.style.width = '0px';
+      this.drawOverlayEl.style.height = '0px';
+      if (this.boxFillColor !== 'none') {
+        var fillPreview = colorWithOpacity(this.boxFillColor, this.boxFillOpacity);
+        this.drawOverlayEl.style.background = fillPreview || 'rgba(0, 160, 223, 0.1)';
+      } else {
+        this.drawOverlayEl.style.background = 'rgba(0, 160, 223, 0.1)';
+      }
+      if (this.boxBorderColor !== 'none') {
+        var borderPreview = colorWithOpacity(this.boxBorderColor, this.boxBorderOpacity);
+        if (borderPreview) {
+          this.drawOverlayEl.style.borderColor = borderPreview;
+          this.drawOverlayEl.style.borderStyle = 'solid';
+          this.drawOverlayEl.style.borderWidth = '2px';
+        }
+      }
+    } else if (tool === 'underline-straight') {
+      // Straight line preview
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'underline-drawing-preview');
+      svg.style.position = 'absolute';
+      svg.style.top = '0';
+      svg.style.left = '0';
+      svg.style.width = '100%';
+      svg.style.height = '100%';
+      svg.style.pointerEvents = 'none';
+      svg.style.zIndex = '20';
+      var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', this.drawStartPos.x);
+      line.setAttribute('y1', this.drawStartPos.y);
+      line.setAttribute('x2', this.drawStartPos.x);
+      line.setAttribute('y2', this.drawStartPos.y);
+      line.setAttribute('stroke', UNDERLINE_COLORS[this.underlineColor] || UNDERLINE_COLORS.red);
+      line.setAttribute('stroke-width', this.underlineWidth);
+      line.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(line);
+      annotLayer.appendChild(svg);
+      this.drawOverlayEl = svg;
+    } else if (tool === 'underline-freehand') {
+      // Freehand preview
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'underline-drawing-preview');
+      svg.style.position = 'absolute';
+      svg.style.top = '0';
+      svg.style.left = '0';
+      svg.style.width = '100%';
+      svg.style.height = '100%';
+      svg.style.pointerEvents = 'none';
+      svg.style.zIndex = '20';
+      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', UNDERLINE_COLORS[this.underlineColor] || UNDERLINE_COLORS.red);
+      path.setAttribute('stroke-width', this.underlineWidth);
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+      path.setAttribute('d', 'M ' + this.drawStartPos.x + ' ' + this.drawStartPos.y);
+      svg.appendChild(path);
+      annotLayer.appendChild(svg);
+      this.drawOverlayEl = svg;
+      this.freehandPoints = [{ x: this.drawStartPos.x, y: this.drawStartPos.y }];
+      this.freehandSvgPath = path;
     }
   };
 
-  AnnotationManager.prototype.handleMouseMove = function (e) {
-    if (!this.isDrawingArea || !this.drawOverlayEl || !this.drawPageWrapper) return;
+  // Unified move handler for all right-click drawing
+  AnnotationManager.prototype.handleDrawMove = function (e) {
+    if (!this.isDrawing || !this.drawOverlayEl || !this.drawPageWrapper) return;
 
     var wrapperRect = this.drawPageWrapper.getBoundingClientRect();
     var curX = Math.max(0, Math.min(e.clientX - wrapperRect.left, wrapperRect.width));
     var curY = Math.max(0, Math.min(e.clientY - wrapperRect.top, wrapperRect.height));
-
     var sx = this.drawStartPos.x;
     var sy = this.drawStartPos.y;
-    var left = Math.min(sx, curX);
-    var top = Math.min(sy, curY);
-    var width = Math.abs(curX - sx);
-    var height = Math.abs(curY - sy);
 
-    this.drawOverlayEl.style.left = left + 'px';
-    this.drawOverlayEl.style.top = top + 'px';
-    this.drawOverlayEl.style.width = width + 'px';
-    this.drawOverlayEl.style.height = height + 'px';
+    if (this.drawingType === 'memo' || this.drawingType === 'box') {
+      var left = Math.min(sx, curX);
+      var top = Math.min(sy, curY);
+      var width = Math.abs(curX - sx);
+      var height = Math.abs(curY - sy);
+      this.drawOverlayEl.style.left = left + 'px';
+      this.drawOverlayEl.style.top = top + 'px';
+      this.drawOverlayEl.style.width = width + 'px';
+      this.drawOverlayEl.style.height = height + 'px';
+    } else if (this.drawingType === 'underline-straight') {
+      var line = this.drawOverlayEl.querySelector('line');
+      if (line) {
+        line.setAttribute('x2', curX);
+        line.setAttribute('y2', sy); // Y fixed for straight line
+      }
+    } else if (this.drawingType === 'underline-freehand') {
+      this.freehandPoints.push({ x: curX, y: curY });
+      if (this.freehandSvgPath) {
+        this.freehandSvgPath.setAttribute('d', this.freehandSvgPath.getAttribute('d') + ' L ' + curX + ' ' + curY);
+      }
+    }
   };
 
-  AnnotationManager.prototype.handleRightMouseUp = function (e) {
-    if (!this.isDrawingArea || !this.drawOverlayEl || !this.drawPageWrapper) {
-      this.isDrawingArea = false;
+  // Unified end handler for all right-click drawing
+  AnnotationManager.prototype.handleDrawEnd = function (e) {
+    if (!this.isDrawing || !this.drawOverlayEl || !this.drawPageWrapper) {
+      this.isDrawing = false;
+      this.drawingType = null;
       return;
     }
 
     var wrapperRect = this.drawPageWrapper.getBoundingClientRect();
     var curX = Math.max(0, Math.min(e.clientX - wrapperRect.left, wrapperRect.width));
     var curY = Math.max(0, Math.min(e.clientY - wrapperRect.top, wrapperRect.height));
-
     var sx = this.drawStartPos.x;
     var sy = this.drawStartPos.y;
-    var left = Math.min(sx, curX);
-    var top = Math.min(sy, curY);
-    var width = Math.abs(curX - sx);
-    var height = Math.abs(curY - sy);
+    var pageNum = this.drawStartPos.pageNum;
 
-    // Remove temporary drawing overlay
+    // Remove preview
     this.drawOverlayEl.remove();
     this.drawOverlayEl = null;
 
-    // Minimum size check (at least 10px both directions)
-    if (width < 10 || height < 10) {
-      this.isDrawingArea = false;
-      this.drawPageWrapper = null;
-      return;
+    if (this.drawingType === 'memo') {
+      var left = Math.min(sx, curX);
+      var top = Math.min(sy, curY);
+      var width = Math.abs(curX - sx);
+      var height = Math.abs(curY - sy);
+      if (width >= 10 && height >= 10) {
+        var rect = {
+          left: left / wrapperRect.width,
+          top: top / wrapperRect.height,
+          width: width / wrapperRect.width,
+          height: height / wrapperRect.height,
+        };
+        this.createAreaMemo(pageNum, rect, this.selectedMemoColor);
+      }
+    } else if (this.drawingType === 'box') {
+      var left = Math.min(sx, curX);
+      var top = Math.min(sy, curY);
+      var width = Math.abs(curX - sx);
+      var height = Math.abs(curY - sy);
+      if (width >= 5 && height >= 5) {
+        var rect = {
+          left: left / wrapperRect.width,
+          top: top / wrapperRect.height,
+          width: width / wrapperRect.width,
+          height: height / wrapperRect.height,
+        };
+        this.createBox(pageNum, rect, this.boxFillColor, this.boxBorderColor);
+      }
+    } else if (this.drawingType === 'underline-straight') {
+      var dist = Math.abs(curX - sx);
+      if (dist >= 5) {
+        this.createUnderline(pageNum, 'straight', {
+          start: { x: sx / wrapperRect.width, y: sy / wrapperRect.height },
+          end: { x: curX / wrapperRect.width, y: sy / wrapperRect.height },
+        }, this.underlineColor, this.underlineWidth);
+      }
+    } else if (this.drawingType === 'underline-freehand') {
+      this.freehandPoints.push({ x: curX, y: curY });
+      if (this.freehandPoints.length >= 3) {
+        var normalizedPoints = this.freehandPoints.map(function (p) {
+          return { x: p.x / wrapperRect.width, y: p.y / wrapperRect.height };
+        });
+        this.createUnderline(pageNum, 'freehand', {
+          points: normalizedPoints,
+        }, this.underlineColor, this.underlineWidth);
+      }
+      this.freehandPoints = [];
+      this.freehandSvgPath = null;
     }
 
-    // Normalize to 0-1
-    var rect = {
-      left: left / wrapperRect.width,
-      top: top / wrapperRect.height,
-      width: width / wrapperRect.width,
-      height: height / wrapperRect.height,
-    };
-
-    this.createAreaMemo(this.drawStartPos.pageNum, rect, this.selectedMemoColor);
-
-    this.isDrawingArea = false;
+    this.isDrawing = false;
+    this.drawingType = null;
     this.drawPageWrapper = null;
   };
 
@@ -3348,214 +3473,7 @@
     if (el) el.remove();
   };
 
-  // ---- Left-click drag: Box / Underline ----
-
-  AnnotationManager.prototype.handleLeftMouseDown = function (e) {
-    var target = e.target;
-    if (target.closest('.highlight-group') || target.closest('.area-memo-group') ||
-        target.closest('.memo-container') || target.closest('.box-annotation') ||
-        target.closest('.underline-svg-container')) return;
-
-    var pageWrapper = target.closest('.page-wrapper');
-    if (!pageWrapper) return;
-
-    e.preventDefault();
-    var wrapperRect = pageWrapper.getBoundingClientRect();
-    this.isLeftDrawing = true;
-    this.leftDrawPageWrapper = pageWrapper;
-    this.leftDrawStartPos = {
-      x: e.clientX - wrapperRect.left,
-      y: e.clientY - wrapperRect.top,
-      pageNum: parseInt(pageWrapper.dataset.page),
-    };
-
-    var annotLayer = pageWrapper.querySelector('.custom-annotations');
-    if (!annotLayer) return;
-
-    if (this.activeDrawTool === 'box') {
-      // Create temporary drawing preview
-      this.leftDrawOverlayEl = createElement('div', 'box-drawing-preview', annotLayer);
-      this.leftDrawOverlayEl.style.left = this.leftDrawStartPos.x + 'px';
-      this.leftDrawOverlayEl.style.top = this.leftDrawStartPos.y + 'px';
-      this.leftDrawOverlayEl.style.width = '0px';
-      this.leftDrawOverlayEl.style.height = '0px';
-      // Show color preview with opacity
-      if (this.boxFillColor !== 'none') {
-        var fillPreview = colorWithOpacity(this.boxFillColor, this.boxFillOpacity);
-        this.leftDrawOverlayEl.style.background = fillPreview || 'rgba(0, 160, 223, 0.1)';
-      } else {
-        this.leftDrawOverlayEl.style.background = 'rgba(0, 160, 223, 0.1)';
-      }
-      if (this.boxBorderColor !== 'none') {
-        var borderPreview = colorWithOpacity(this.boxBorderColor, this.boxBorderOpacity);
-        if (borderPreview) {
-          this.leftDrawOverlayEl.style.borderColor = borderPreview;
-          this.leftDrawOverlayEl.style.borderStyle = 'solid';
-          this.leftDrawOverlayEl.style.borderWidth = '2px';
-        }
-      }
-    } else if (this.activeDrawTool === 'underline-straight') {
-      // Create SVG preview for straight line
-      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('class', 'underline-drawing-preview');
-      svg.style.position = 'absolute';
-      svg.style.top = '0';
-      svg.style.left = '0';
-      svg.style.width = '100%';
-      svg.style.height = '100%';
-      svg.style.pointerEvents = 'none';
-      svg.style.zIndex = '20';
-      var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', this.leftDrawStartPos.x);
-      line.setAttribute('y1', this.leftDrawStartPos.y);
-      line.setAttribute('x2', this.leftDrawStartPos.x);
-      line.setAttribute('y2', this.leftDrawStartPos.y);
-      line.setAttribute('stroke', UNDERLINE_COLORS[this.underlineColor] || UNDERLINE_COLORS.red);
-      line.setAttribute('stroke-width', this.underlineWidth);
-      line.setAttribute('stroke-linecap', 'round');
-      svg.appendChild(line);
-      annotLayer.appendChild(svg);
-      this.leftDrawOverlayEl = svg;
-    } else if (this.activeDrawTool === 'underline-freehand') {
-      // Create SVG preview for freehand
-      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('class', 'underline-drawing-preview');
-      svg.style.position = 'absolute';
-      svg.style.top = '0';
-      svg.style.left = '0';
-      svg.style.width = '100%';
-      svg.style.height = '100%';
-      svg.style.pointerEvents = 'none';
-      svg.style.zIndex = '20';
-      var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', UNDERLINE_COLORS[this.underlineColor] || UNDERLINE_COLORS.red);
-      path.setAttribute('stroke-width', this.underlineWidth);
-      path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('stroke-linejoin', 'round');
-      path.setAttribute('d', 'M ' + this.leftDrawStartPos.x + ' ' + this.leftDrawStartPos.y);
-      svg.appendChild(path);
-      annotLayer.appendChild(svg);
-      this.leftDrawOverlayEl = svg;
-      this.freehandPoints = [{ x: this.leftDrawStartPos.x, y: this.leftDrawStartPos.y }];
-      this.freehandSvgPath = path;
-    }
-  };
-
-  AnnotationManager.prototype.handleLeftMouseMove = function (e) {
-    if (!this.isLeftDrawing || !this.leftDrawOverlayEl || !this.leftDrawPageWrapper) return;
-
-    var wrapperRect = this.leftDrawPageWrapper.getBoundingClientRect();
-    var curX = Math.max(0, Math.min(e.clientX - wrapperRect.left, wrapperRect.width));
-    var curY = Math.max(0, Math.min(e.clientY - wrapperRect.top, wrapperRect.height));
-
-    if (this.activeDrawTool === 'box') {
-      var sx = this.leftDrawStartPos.x;
-      var sy = this.leftDrawStartPos.y;
-      var left = Math.min(sx, curX);
-      var top = Math.min(sy, curY);
-      var width = Math.abs(curX - sx);
-      var height = Math.abs(curY - sy);
-      this.leftDrawOverlayEl.style.left = left + 'px';
-      this.leftDrawOverlayEl.style.top = top + 'px';
-      this.leftDrawOverlayEl.style.width = width + 'px';
-      this.leftDrawOverlayEl.style.height = height + 'px';
-    } else if (this.activeDrawTool === 'underline-straight') {
-      var line = this.leftDrawOverlayEl.querySelector('line');
-      if (line) {
-        line.setAttribute('x2', curX);
-        line.setAttribute('y2', this.leftDrawStartPos.y); // Y fixed
-      }
-    } else if (this.activeDrawTool === 'underline-freehand') {
-      this.freehandPoints.push({ x: curX, y: curY });
-      if (this.freehandSvgPath) {
-        this.freehandSvgPath.setAttribute('d', this.freehandSvgPath.getAttribute('d') + ' L ' + curX + ' ' + curY);
-      }
-    }
-  };
-
-  AnnotationManager.prototype.handleLeftMouseUp = function (e) {
-    if (!this.isLeftDrawing || !this.leftDrawOverlayEl || !this.leftDrawPageWrapper) {
-      this.isLeftDrawing = false;
-      return;
-    }
-
-    var wrapperRect = this.leftDrawPageWrapper.getBoundingClientRect();
-    var curX = Math.max(0, Math.min(e.clientX - wrapperRect.left, wrapperRect.width));
-    var curY = Math.max(0, Math.min(e.clientY - wrapperRect.top, wrapperRect.height));
-    var pageNum = this.leftDrawStartPos.pageNum;
-
-    // Remove preview
-    this.leftDrawOverlayEl.remove();
-    this.leftDrawOverlayEl = null;
-
-    if (this.activeDrawTool === 'box') {
-      var sx = this.leftDrawStartPos.x;
-      var sy = this.leftDrawStartPos.y;
-      var left = Math.min(sx, curX);
-      var top = Math.min(sy, curY);
-      var width = Math.abs(curX - sx);
-      var height = Math.abs(curY - sy);
-
-      // Minimum size
-      if (width < 5 || height < 5) {
-        this.isLeftDrawing = false;
-        this.leftDrawPageWrapper = null;
-        return;
-      }
-
-      // Normalize to 0-1
-      var rect = {
-        left: left / wrapperRect.width,
-        top: top / wrapperRect.height,
-        width: width / wrapperRect.width,
-        height: height / wrapperRect.height,
-      };
-      this.createBox(pageNum, rect, this.boxFillColor, this.boxBorderColor);
-
-    } else if (this.activeDrawTool === 'underline-straight') {
-      var sx = this.leftDrawStartPos.x;
-      var startY = this.leftDrawStartPos.y;
-      var dist = Math.abs(curX - sx);
-
-      if (dist < 5) {
-        this.isLeftDrawing = false;
-        this.leftDrawPageWrapper = null;
-        return;
-      }
-
-      this.createUnderline(pageNum, 'straight', {
-        start: { x: sx / wrapperRect.width, y: startY / wrapperRect.height },
-        end: { x: curX / wrapperRect.width, y: startY / wrapperRect.height },
-      }, this.underlineColor, this.underlineWidth);
-
-    } else if (this.activeDrawTool === 'underline-freehand') {
-      this.freehandPoints.push({ x: curX, y: curY });
-
-      if (this.freehandPoints.length < 3) {
-        this.isLeftDrawing = false;
-        this.leftDrawPageWrapper = null;
-        this.freehandPoints = [];
-        this.freehandSvgPath = null;
-        return;
-      }
-
-      // Normalize points
-      var normalizedPoints = this.freehandPoints.map(function (p) {
-        return { x: p.x / wrapperRect.width, y: p.y / wrapperRect.height };
-      });
-
-      this.createUnderline(pageNum, 'freehand', {
-        points: normalizedPoints,
-      }, this.underlineColor, this.underlineWidth);
-
-      this.freehandPoints = [];
-      this.freehandSvgPath = null;
-    }
-
-    this.isLeftDrawing = false;
-    this.leftDrawPageWrapper = null;
-  };
+  // (Left-click drag methods removed — all drawing now uses right-click via handleRightMouseDown/handleDrawMove/handleDrawEnd)
 
   // ---- Box CRUD ----
 
@@ -3829,6 +3747,247 @@
     this.engine.emit('memosChanged');
   };
 
+  // ==================== tabmanager.js ====================
+  function TabManager(app) {
+    this.app = app;
+    this.tabs = [];
+    this.activeTabId = null;
+    this.closedTabs = [];
+    this.tabIdCounter = 0;
+    this.tabListEl = $('#tab-list');
+    this.tabAddBtn = $('#tab-add');
+  }
+
+  TabManager.prototype.init = function () {
+    var self = this;
+    if (this.tabAddBtn) {
+      this.tabAddBtn.addEventListener('click', function () {
+        self.app.fileInput.click();
+      });
+    }
+  };
+
+  TabManager.prototype.createTab = function (filename, pdfDoc, fingerprint) {
+    var id = ++this.tabIdCounter;
+    var tab = {
+      id: id,
+      filename: filename || 'Untitled',
+      pdfDoc: pdfDoc,
+      fingerprint: fingerprint,
+      annotState: null,
+      scrollTop: 0,
+      scale: null,
+    };
+    this.tabs.push(tab);
+    this.renderTab(tab);
+    this.switchTab(id);
+    return tab;
+  };
+
+  TabManager.prototype.renderTab = function (tab) {
+    var self = this;
+    var el = document.createElement('div');
+    el.className = 'tab-item';
+    el.dataset.tabId = tab.id;
+    el.innerHTML = '<span class="tab-item-name">' + escapeHTML(tab.filename) + '</span>' +
+      '<button class="tab-item-close" title="\uD0ED \uB2EB\uAE30">&times;</button>';
+    el.addEventListener('click', function (e) {
+      if (!e.target.closest('.tab-item-close')) {
+        self.switchTab(tab.id);
+      }
+    });
+    el.querySelector('.tab-item-close').addEventListener('click', function (e) {
+      e.stopPropagation();
+      self.closeTab(tab.id);
+    });
+    this.tabListEl.appendChild(el);
+  };
+
+  TabManager.prototype.switchTab = function (tabId) {
+    if (this.activeTabId === tabId) return;
+
+    // Save current tab state
+    if (this.activeTabId !== null) {
+      this.saveTabState(this.activeTabId);
+    }
+
+    this.activeTabId = tabId;
+    this.updateTabUI();
+
+    var tab = this.getTab(tabId);
+    if (!tab) return;
+
+    // Restore tab
+    this.restoreTabState(tab);
+  };
+
+  TabManager.prototype.saveTabState = function (tabId) {
+    var tab = this.getTab(tabId);
+    if (!tab) return;
+    var am = this.app.annotations;
+    tab.annotState = {
+      highlights: JSON.parse(JSON.stringify(am.highlights)),
+      memos: JSON.parse(JSON.stringify(am.memos)),
+      boxes: JSON.parse(JSON.stringify(am.boxes)),
+      underlines: JSON.parse(JSON.stringify(am.underlines)),
+      emojis: JSON.parse(JSON.stringify(am.emojis)),
+    };
+    tab.scrollTop = this.app.engine.viewerContainer.scrollTop;
+    tab.scale = this.app.engine.currentScale;
+  };
+
+  TabManager.prototype.restoreTabState = function (tab) {
+    var self = this;
+    var engine = this.app.engine;
+    var am = this.app.annotations;
+
+    // Clear current viewer
+    engine.clearView();
+    var viewerContainer = engine.viewerContainer;
+    var welcome = viewerContainer.querySelector('#welcome-screen');
+
+    if (!tab.pdfDoc) {
+      // Empty tab — show welcome screen
+      if (welcome) welcome.classList.remove('hidden');
+      am.highlights = [];
+      am.memos = [];
+      am.boxes = [];
+      am.underlines = [];
+      am.emojis = [];
+      am.docKey = null;
+      document.title = 'PDF \uBDF0\uC5B4';
+      return;
+    }
+
+    if (welcome) welcome.classList.add('hidden');
+
+    // Set the pdfDoc and re-render pages
+    engine.pdfDoc = tab.pdfDoc;
+    engine.totalPages = tab.pdfDoc.numPages;
+    if (tab.scale) engine.currentScale = tab.scale;
+
+    engine.setupPages().then(function () {
+      // Restore annotations
+      am.docKey = tab.fingerprint;
+      if (tab.annotState) {
+        am.highlights = tab.annotState.highlights;
+        am.memos = tab.annotState.memos;
+        am.boxes = tab.annotState.boxes;
+        am.underlines = tab.annotState.underlines;
+        am.emojis = tab.annotState.emojis;
+      } else {
+        am.highlights = self.app.storage.loadHighlights(tab.fingerprint);
+        am.memos = self.app.storage.loadMemos(tab.fingerprint);
+        am.boxes = self.app.storage.loadBoxes(tab.fingerprint);
+        am.underlines = self.app.storage.loadUnderlines(tab.fingerprint);
+        am.emojis = self.app.storage.loadEmojis(tab.fingerprint);
+      }
+      am.renderAllEmojis();
+      self.app.sidebar.renderMemos();
+      self.app.sidebar.renderDecorations();
+
+      // Restore scroll position
+      if (tab.scrollTop) {
+        viewerContainer.scrollTop = tab.scrollTop;
+      }
+
+      // Update toolbar page indicator
+      engine.emit('pageChanged', { pageNum: 1 });
+      document.title = tab.filename + ' - PDF \uBDF0\uC5B4';
+    });
+  };
+
+  TabManager.prototype.closeTab = function (tabId) {
+    var idx = this.tabs.findIndex(function (t) { return t.id === tabId; });
+    if (idx === -1) return;
+
+    var tab = this.tabs[idx];
+
+    // Save state before closing
+    if (this.activeTabId === tabId) {
+      this.saveTabState(tabId);
+    }
+
+    // Push to closed stack for restore
+    this.closedTabs.push(tab);
+
+    // Remove tab
+    this.tabs.splice(idx, 1);
+    var tabEl = this.tabListEl.querySelector('[data-tab-id="' + tabId + '"]');
+    if (tabEl) tabEl.remove();
+
+    if (this.tabs.length === 0) {
+      // No tabs left — show welcome
+      this.activeTabId = null;
+      this.app.engine.clearView();
+      this.app.engine.pdfDoc = null;
+      this.app.engine.totalPages = 0;
+      var welcome = $('#welcome-screen');
+      if (welcome) welcome.classList.remove('hidden');
+      this.app.annotations.docKey = null;
+      this.app.annotations.highlights = [];
+      this.app.annotations.memos = [];
+      this.app.annotations.boxes = [];
+      this.app.annotations.underlines = [];
+      this.app.annotations.emojis = [];
+      // Clear sidebar thumbnails
+      var thumbPanel = $('#panel-thumbnails');
+      if (thumbPanel) thumbPanel.innerHTML = '';
+      document.title = 'PDF \uBDF0\uC5B4';
+      return;
+    }
+
+    // Switch to adjacent tab
+    if (this.activeTabId === tabId) {
+      var nextIdx = Math.min(idx, this.tabs.length - 1);
+      this.activeTabId = null; // Reset so switchTab processes
+      this.switchTab(this.tabs[nextIdx].id);
+    }
+  };
+
+  TabManager.prototype.reopenTab = function () {
+    if (this.closedTabs.length === 0) {
+      showToast('\uBCF5\uC6D0\uD560 \uD0ED\uC774 \uC5C6\uC2B5\uB2C8\uB2E4');
+      return;
+    }
+    var tab = this.closedTabs.pop();
+    this.tabs.push(tab);
+    this.renderTab(tab);
+    this.switchTab(tab.id);
+    showToast('\uD0ED \uBCF5\uC6D0: ' + tab.filename);
+  };
+
+  TabManager.prototype.nextTab = function () {
+    if (this.tabs.length <= 1) return;
+    var idx = this.tabs.findIndex(function (t) { return t.id === this.activeTabId; }.bind(this));
+    var nextIdx = (idx + 1) % this.tabs.length;
+    this.switchTab(this.tabs[nextIdx].id);
+  };
+
+  TabManager.prototype.prevTab = function () {
+    if (this.tabs.length <= 1) return;
+    var idx = this.tabs.findIndex(function (t) { return t.id === this.activeTabId; }.bind(this));
+    var prevIdx = (idx - 1 + this.tabs.length) % this.tabs.length;
+    this.switchTab(this.tabs[prevIdx].id);
+  };
+
+  TabManager.prototype.getTab = function (tabId) {
+    return this.tabs.find(function (t) { return t.id === tabId; });
+  };
+
+  TabManager.prototype.updateTabUI = function () {
+    var activeId = this.activeTabId;
+    this.tabListEl.querySelectorAll('.tab-item').forEach(function (el) {
+      el.classList.toggle('active', parseInt(el.dataset.tabId) === activeId);
+    });
+  };
+
+  function escapeHTML(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
   // ==================== app.js ====================
   function PDFViewerApp() {
     this.engine = new PDFEngine();
@@ -3838,6 +3997,7 @@
     this.sidebar.app = this;
     this.search = new SearchController(this.engine);
     this.annotations = new AnnotationManager(this.engine, this.storage);
+    this.tabManager = new TabManager(this);
     this.fileInput = document.getElementById('file-input');
   }
 
@@ -3850,6 +4010,7 @@
     this.sidebar.init();
     this.sidebar.annotations = this.annotations;
     this.search.init();
+    this.tabManager.init();
 
     this.setupDragAndDrop();
     this.setupFileSelection();
@@ -4025,13 +4186,14 @@
     var self = this;
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
-        // Clear selection first, then deactivate draw tools
+        // Clear selection on Escape
         if (self.annotations.selectedAnnotations.size > 0) {
           self.annotations.clearSelection();
           return;
         }
-        if (self.annotations.activeDrawTool !== 'none') {
-          self.annotations.setActiveDrawTool('none');
+        // Reset to default tool (memo)
+        if (self.annotations.activeDrawTool !== 'memo') {
+          self.annotations.setActiveDrawTool('memo');
           return;
         }
       }
@@ -4055,6 +4217,30 @@
       }
 
       if (e.ctrlKey || e.metaKey) {
+        // Tab navigation: Ctrl+Tab / Ctrl+Shift+Tab
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            self.tabManager.prevTab();
+          } else {
+            self.tabManager.nextTab();
+          }
+          return;
+        }
+        // Ctrl+W: close tab
+        if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          if (self.tabManager.activeTabId !== null) {
+            self.tabManager.closeTab(self.tabManager.activeTabId);
+          }
+          return;
+        }
+        // Ctrl+Shift+T: reopen closed tab
+        if ((e.key === 't' || e.key === 'T') && e.shiftKey) {
+          e.preventDefault();
+          self.tabManager.reopenTab();
+          return;
+        }
         switch (e.key) {
           case 'f':
             e.preventDefault();
@@ -4121,14 +4307,15 @@
     var welcome = $('#welcome-screen');
     if (welcome) welcome.classList.add('hidden');
 
+    this._pendingFilename = file.name;
     var reader = new FileReader();
     reader.onload = function () {
       self.engine.loadDocument(reader.result).then(function () {
         self.engine.pdfFilename = file.name;
-        document.title = file.name + ' - PDF 뷰어';
+        document.title = file.name + ' - PDF \uBDF0\uC5B4';
       }).catch(function (err) {
         console.error('Error opening PDF:', err);
-        alert('PDF 파일을 열 수 없습니다: ' + err.message);
+        alert('PDF \uD30C\uC77C\uC744 \uC5F4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4: ' + err.message);
         if (welcome) welcome.classList.remove('hidden');
       });
     };
@@ -4143,13 +4330,15 @@
     var welcome = $('#welcome-screen');
     if (welcome) welcome.classList.add('hidden');
 
+    var parts = filePath.replace(/\\/g, '/').split('/');
+    var fileName = parts[parts.length - 1];
+    this._pendingFilename = fileName;
+
     window.electronAPI.readPdfFile(filePath)
       .then(function (buffer) {
         // Electron IPC returns Buffer, convert to ArrayBuffer
         var arrayBuffer = buffer instanceof ArrayBuffer ? buffer : buffer.buffer || buffer;
         return self.engine.loadDocument(arrayBuffer).then(function () {
-          var parts = filePath.replace(/\\/g, '/').split('/');
-          var fileName = parts[parts.length - 1];
           document.title = fileName + ' - PDF \uBDF0\uC5B4';
         });
       })
@@ -4589,6 +4778,25 @@
 
   PDFViewerApp.prototype.onDocumentLoaded = function (detail) {
     var self = this;
+    var filename = this._pendingFilename || 'Untitled.pdf';
+    this._pendingFilename = null;
+
+    // Create tab for this document
+    // Tab creation handles switchTab internally, but we need to set up annotations first
+    var tab = {
+      id: ++this.tabManager.tabIdCounter,
+      filename: filename,
+      pdfDoc: this.engine.pdfDoc,
+      fingerprint: detail.fingerprint,
+      annotState: null,
+      scrollTop: 0,
+      scale: null,
+    };
+    this.tabManager.tabs.push(tab);
+    this.tabManager.renderTab(tab);
+    // Mark as active without triggering switchTab (we handle setup here)
+    this.tabManager.activeTabId = tab.id;
+    this.tabManager.updateTabUI();
 
     // Restore view state BEFORE building pages so layout is correct
     var viewState = self.storage.loadViewState(detail.fingerprint);
@@ -4609,8 +4817,17 @@
       }
     }
 
+    // Ensure welcome is hidden
+    var welcome = $('#welcome-screen');
+    if (welcome) welcome.classList.add('hidden');
+
     this.engine.setupPages().then(function () {
-      self.annotations.setupListeners();
+      if (!self.annotations._listenersSetup) {
+        self.annotations.setupListeners();
+        self.annotations._listenersSetup = true;
+      }
+      // Emit initial tool state so toolbar buttons reflect the default
+      self.engine.emit('drawToolChanged', { tool: self.annotations.activeDrawTool });
       self.annotations.docKey = detail.fingerprint;
       self.annotations.highlights = self.storage.loadHighlights(detail.fingerprint);
       self.annotations.memos = self.storage.loadMemos(detail.fingerprint);
@@ -4645,6 +4862,7 @@
   // ==================== Bootstrap ====================
   document.addEventListener('DOMContentLoaded', function () {
     var app = new PDFViewerApp();
+    window._app = app;
     app.init();
 
     // Electron IPC: receive file path from main process
